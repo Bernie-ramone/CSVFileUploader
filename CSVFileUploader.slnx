@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CSVFileUploader.Application/CSVFileUploader.Application.csproj" Id="dc2f0b5e-66be-49a1-aa62-899524d35f0d" />
+    <Project Path="src/CSVFileUploader.Domain/CSVFileUploader.Domain.csproj" Id="229a7445-c4c5-4661-8674-ae804974a2c1" />
+    <Project Path="src/CSVFileUploader.Infrastructure/CSVFileUploader.Infrastructure.csproj" Id="faffbe46-cc10-4e0d-96fa-0519839723c6" />
+    <Project Path="src/CSVFileUploader.Web/CSVFileUploader.Web.csproj" Id="898f81aa-3ce7-4495-9a84-c6858c484aaf" />
+  </Folder>
+</Solution>
