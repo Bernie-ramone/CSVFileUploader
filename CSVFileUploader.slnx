@@ -5,4 +5,7 @@
     <Project Path="src/CSVFileUploader.Infrastructure/CSVFileUploader.Infrastructure.csproj" Id="faffbe46-cc10-4e0d-96fa-0519839723c6" />
     <Project Path="src/CSVFileUploader.Web/CSVFileUploader.Web.csproj" Id="898f81aa-3ce7-4495-9a84-c6858c484aaf" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CSVFileUploader.Domain.Tests/CSVFileUploader.Domain.Tests.csproj" Id="a0a1b9c9-cc96-4dec-b4e5-9ba71c751b13" />
+  </Folder>
 </Solution>
