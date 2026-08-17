@@ -51,40 +51,46 @@ namespace CSVFileUploader.Infrastructure.CSV
 
             var rows = new List<CsvRowDto>();
 
+            var rowNumber = 1;
+
             while (await csv.ReadAsync())
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
+                rowNumber++;
+
                 var row = new CsvRowDto(
-                    csv.GetField<string>(CsvFileDefinition.RecordId)
-                        ?? string.Empty,
+                    RowNumber: rowNumber,
 
-                    csv.GetField<string>(CsvFileDefinition.AssetId)
-                        ?? string.Empty,
+                    RecordId: GetRequiredField(
+                        csv,
+                        CsvFileDefinition.RecordId),
 
-                    csv.GetField<string>(CsvFileDefinition.SourceSite)
-                        ?? string.Empty,
+                    AssetId: GetRequiredField(
+                        csv,
+                        CsvFileDefinition.AssetId),
 
-                    csv.GetField<string>(CsvFileDefinition.DestinationSite)
-                        ?? string.Empty,
+                    SourceSite: GetRequiredField(
+                        csv,
+                        CsvFileDefinition.SourceSite),
 
-                    DateOnly.ParseExact(
-                        csv.GetField<string>(
-                            CsvFileDefinition.EventDate)!,
-                        "yyyy-MM-dd",
-                        CultureInfo.InvariantCulture),
+                    DestinationSite: GetRequiredField(
+                        csv,
+                        CsvFileDefinition.DestinationSite),
 
-                    decimal.Parse(
-                        csv.GetField<string>(
-                            CsvFileDefinition.Volume)!,
-                        NumberStyles.Number,
-                        CultureInfo.InvariantCulture),
+                    EventDate: GetRequiredField(
+                        csv,
+                        CsvFileDefinition.EventDate),
 
-                    GetOptionalField(
+                    Volume: GetRequiredField(
+                        csv,
+                        CsvFileDefinition.Volume),
+
+                    Unit: GetOptionalField(
                         csv,
                         CsvFileDefinition.Unit),
 
-                    GetOptionalField(
+                    Notes: GetOptionalField(
                         csv,
                         CsvFileDefinition.Notes));
 
@@ -94,6 +100,14 @@ namespace CSVFileUploader.Infrastructure.CSV
             return new CsvReadResult(
                 headers,
                 rows);
+        }
+
+        private static string GetRequiredField(
+            CsvHelper.CsvReader csv,
+            string fieldName)
+        {
+            return csv.GetField<string>(fieldName)?.Trim()
+                ?? string.Empty;
         }
 
         private static string? GetOptionalField(

@@ -1,4 +1,5 @@
 ﻿using CSVFileUploader.Infrastructure.CSV;
+using System.Text;
 
 namespace CSVFileUploader.Infrastructure.Tests.CSV
 {
@@ -16,7 +17,7 @@ namespace CSVFileUploader.Infrastructure.Tests.CSV
 
             await using var stream =
                 new MemoryStream(
-                    System.Text.Encoding.UTF8.GetBytes(csv));
+                    Encoding.UTF8.GetBytes(csv));
 
             var reader = new CsvReader();
 
@@ -27,14 +28,13 @@ namespace CSVFileUploader.Infrastructure.Tests.CSV
 
             var firstRow = result.Rows.First();
 
+            Assert.Equal(2, firstRow.RowNumber);
             Assert.Equal("REC-0001", firstRow.RecordId);
             Assert.Equal("AST-1001", firstRow.AssetId);
             Assert.Equal("MINE-NORTH", firstRow.SourceSite);
             Assert.Equal("PLANT-A", firstRow.DestinationSite);
-            Assert.Equal(
-                new DateOnly(2026, 8, 1),
-                firstRow.EventDate);
-            Assert.Equal(125.50m, firstRow.Volume);
+            Assert.Equal("2026-08-01", firstRow.EventDate);
+            Assert.Equal("125.50", firstRow.Volume);
             Assert.Equal("TON", firstRow.Unit);
             Assert.Equal("Morning shift", firstRow.Notes);
         }
@@ -50,7 +50,7 @@ namespace CSVFileUploader.Infrastructure.Tests.CSV
 
             await using var stream =
                 new MemoryStream(
-                    System.Text.Encoding.UTF8.GetBytes(csv));
+                    Encoding.UTF8.GetBytes(csv));
 
             var reader = new CsvReader();
 
@@ -63,7 +63,7 @@ namespace CSVFileUploader.Infrastructure.Tests.CSV
         }
 
         [Fact]
-        public async Task ReadAsync_WithInvalidDate_ShouldThrow()
+        public async Task ReadAsync_WithInvalidDate_ShouldStillReadRawValue()
         {
             const string csv =
                 """
@@ -73,16 +73,19 @@ namespace CSVFileUploader.Infrastructure.Tests.CSV
 
             await using var stream =
                 new MemoryStream(
-                    System.Text.Encoding.UTF8.GetBytes(csv));
+                    Encoding.UTF8.GetBytes(csv));
 
             var reader = new CsvReader();
 
-            await Assert.ThrowsAsync<FormatException>(
-                () => reader.ReadAsync(stream));
+            var result = await reader.ReadAsync(stream);
+
+            var row = Assert.Single(result.Rows);
+
+            Assert.Equal("08/01/2026", row.EventDate);
         }
 
         [Fact]
-        public async Task ReadAsync_WithInvalidVolume_ShouldThrow()
+        public async Task ReadAsync_WithInvalidVolume_ShouldStillReadRawValue()
         {
             const string csv =
                 """
@@ -92,12 +95,15 @@ namespace CSVFileUploader.Infrastructure.Tests.CSV
 
             await using var stream =
                 new MemoryStream(
-                    System.Text.Encoding.UTF8.GetBytes(csv));
+                    Encoding.UTF8.GetBytes(csv));
 
             var reader = new CsvReader();
 
-            await Assert.ThrowsAsync<FormatException>(
-                () => reader.ReadAsync(stream));
+            var result = await reader.ReadAsync(stream);
+
+            var row = Assert.Single(result.Rows);
+
+            Assert.Equal("INVALID", row.Volume);
         }
     }
 }

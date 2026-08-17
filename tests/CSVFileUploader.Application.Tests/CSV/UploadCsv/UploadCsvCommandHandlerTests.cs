@@ -4,6 +4,7 @@ using CSVFileUploader.Application.CSV.UploadCsv;
 using CSVFileUploader.Application.DTOs;
 using CSVFileUploader.Domain.Entities;
 using CSVFileUploader.Domain.ValueObjects;
+using CSVFileUploader.Application.CSV.Validators;
 
 namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
 {
@@ -26,25 +27,30 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
                     ],
                     [
                         new CsvRowDto(
-                        "REC-0001",
-                        "AST-1001",
-                        "MINE-NORTH",
-                        "PLANT-A",
-                        new DateOnly(2026, 8, 1),
-                        125.50m,
-                        "TON",
-                        "Morning shift")
+    RowNumber: 2,
+    RecordId: "REC-0001",
+    AssetId: "AST-1001",
+    SourceSite: "MINE-NORTH",
+    DestinationSite: "PLANT-A",
+    EventDate: "2026-08-01",
+    Volume: "125.50",
+    Unit: "TON",
+    Notes: "Morning shift")
                     ]));
 
             var structureValidator = new FakeStructureValidator(
                 CsvStructureValidationResult.Success());
 
             var repository = new FakeImportedRecordRepository();
+            var rowValidator = new CsvRowValidator();
+            var commandValidator = new UploadCsvCommandValidator();
 
             var handler = new UploadCsvCommandHandler(
                 csvReader,
                 structureValidator,
-                repository);
+                repository,
+                rowValidator,
+                   commandValidator);
 
             await using var stream = new MemoryStream();
 
@@ -76,11 +82,14 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
                     "Missing required columns."));
 
             var repository = new FakeImportedRecordRepository();
-
+            var rowValidator = new CsvRowValidator();
+            var commandValidator = new UploadCsvCommandValidator();
             var handler = new UploadCsvCommandHandler(
                 csvReader,
                 structureValidator,
-                repository);
+                repository,
+                rowValidator,
+                commandValidator);
 
             await using var stream = new MemoryStream();
 
@@ -94,6 +103,71 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
 
             Assert.Equal(0, result.InsertedRows);
             Assert.Single(result.Errors);
+            Assert.Empty(repository.InsertedRecords);
+        }
+
+        [Fact]
+        public async Task HandleAsync_WithInvalidRow_ShouldReturnErrorAndNotInsertRecord()
+        {
+            var csvReader = new FakeCsvReader(
+                new CsvReadResult(
+                    [
+                        "RecordId",
+                "AssetId",
+                "SourceSite",
+                "DestinationSite",
+                "EventDate",
+                "Volume",
+                "Unit",
+                "Notes"
+                    ],
+                    [
+                        new CsvRowDto(
+                    RowNumber: 2,
+                    RecordId: "REC-0001",
+                    AssetId: "INVALID",
+                    SourceSite: "MINE-NORTH",
+                    DestinationSite: "PLANT-A",
+                    EventDate: "2026-08-01",
+                    Volume: "125.50",
+                    Unit: "TON",
+                    Notes: "Invalid asset")
+                    ]));
+
+            var structureValidator = new FakeStructureValidator(
+                CsvStructureValidationResult.Success());
+
+            var repository = new FakeImportedRecordRepository();
+
+            var rowValidator = new CsvRowValidator();
+            var commandValidator = new UploadCsvCommandValidator();
+
+            var handler = new UploadCsvCommandHandler(
+                csvReader,
+                structureValidator,
+                repository,
+                rowValidator,
+                commandValidator);
+
+            await using var stream = new MemoryStream();
+
+            var command = new UploadCsvCommand(
+                stream,
+                "test.csv",
+                "text/csv",
+                100);
+
+            var result = await handler.HandleAsync(command);
+            var error = Assert.Single(result.Errors);
+
+            Assert.Equal(1, result.TotalRows);
+            Assert.Equal(0, result.InsertedRows);
+            Assert.Equal(0, result.DuplicateRows);
+
+            Assert.Single(result.Errors);
+
+            Assert.Equal(2, error.RowNumber);
+
             Assert.Empty(repository.InsertedRecords);
         }
 
