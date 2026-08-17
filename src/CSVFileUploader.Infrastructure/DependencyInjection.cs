@@ -29,6 +29,9 @@ namespace CSVFileUploader.Infrastructure
             services.AddScoped<IImportedRecordRepository,
                 ImportedRecordRepository>();
 
+            services.AddScoped<ICsvReader, CSV.CsvReader>();
+            services.AddScoped<ICsvStructureValidator, CSV.CsvStructureValidator>();
+
             return services;
         }
     }
