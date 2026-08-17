@@ -31,6 +31,14 @@ namespace CSVFileUploader.Domain.Entities
                 EventDate,
                 Volume);
 
+        private ImportedRecord()
+        {
+            RecordId = string.Empty;
+            AssetId = string.Empty;
+            SourceSite = string.Empty;
+            DestinationSite = string.Empty;
+        }
+
         private ImportedRecord(
             string recordId,
             string assetId,
