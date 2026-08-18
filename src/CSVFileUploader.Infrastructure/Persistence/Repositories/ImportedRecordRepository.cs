@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 namespace CSVFileUploader.Infrastructure.Persistence.Repositories
 {
     public sealed class ImportedRecordRepository
-    : IImportedRecordRepository
+     : IImportedRecordRepository
     {
         private readonly ApplicationDbContext _context;
 
@@ -16,31 +16,63 @@ namespace CSVFileUploader.Infrastructure.Persistence.Repositories
             _context = context;
         }
 
-        public Task<bool> ExistsByBusinessKeyAsync(
-            ImportedRecordKey businessKey,
-            CancellationToken cancellationToken = default)
+        public async Task<IReadOnlyCollection<ImportedRecordKey>>
+            GetExistingBusinessKeysAsync(
+                IReadOnlyCollection<ImportedRecordKey> businessKeys,
+                CancellationToken cancellationToken = default)
         {
-            return _context.ImportedRecords
+            if (businessKeys.Count == 0)
+            {
+                return [];
+            }
+
+            var assetIds = businessKeys
+                .Select(key => key.AssetId)
+                .Distinct()
+                .ToArray();
+
+            var eventDates = businessKeys
+                .Select(key => key.EventDate)
+                .Distinct()
+                .ToArray();
+
+            var candidates = await _context.ImportedRecords
                 .AsNoTracking()
-                .AnyAsync(
-                    x =>
-                        x.AssetId == businessKey.AssetId &&
-                        x.SourceSite == businessKey.SourceSite &&
-                        x.DestinationSite == businessKey.DestinationSite &&
-                        x.EventDate == businessKey.EventDate &&
-                        x.Volume == businessKey.Volume,
-                    cancellationToken);
+                .Where(record =>
+                    assetIds.Contains(record.AssetId) &&
+                    eventDates.Contains(record.EventDate))
+                .Select(record => new ImportedRecordKey(
+                    record.AssetId,
+                    record.SourceSite,
+                    record.DestinationSite,
+                    record.EventDate,
+                    record.Volume))
+                .ToListAsync(cancellationToken);
+
+            var requestedKeys =
+                businessKeys.ToHashSet();
+
+            return candidates
+                .Where(requestedKeys.Contains)
+                .Distinct()
+                .ToArray();
         }
 
         public async Task AddRangeAsync(
             IReadOnlyCollection<ImportedRecord> records,
             CancellationToken cancellationToken = default)
         {
+            if (records.Count == 0)
+            {
+                return;
+            }
+
             await _context.ImportedRecords.AddRangeAsync(
                 records,
                 cancellationToken);
 
-            await _context.SaveChangesAsync(cancellationToken);
+            await _context.SaveChangesAsync(
+                cancellationToken);
         }
     }
 }

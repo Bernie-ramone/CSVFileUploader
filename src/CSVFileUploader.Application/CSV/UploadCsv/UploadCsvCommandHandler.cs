@@ -1,10 +1,9 @@
-﻿using System.Globalization;
-using CSVFileUploader.Application.Common.Interfaces;
+﻿using CSVFileUploader.Application.Common.Interfaces;
 using CSVFileUploader.Application.Common.Models;
-using CSVFileUploader.Application.CSV.Validators;
+using CSVFileUploader.Application.DTOs;
 using CSVFileUploader.Domain.Entities;
-using CSVFileUploader.Domain.Enums;
 using FluentValidation;
+using System.Globalization;
 
 namespace CSVFileUploader.Application.CSV.UploadCsv
 {
@@ -13,14 +12,14 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
         private readonly ICsvReader _csvReader;
         private readonly ICsvStructureValidator _structureValidator;
         private readonly IImportedRecordRepository _repository;
-        private readonly IValidator<DTOs.CsvRowDto> _rowValidator;
+        private readonly IValidator<CsvRowDto> _rowValidator;
         private readonly IValidator<UploadCsvCommand> _commandValidator;
 
         public UploadCsvCommandHandler(
             ICsvReader csvReader,
             ICsvStructureValidator structureValidator,
             IImportedRecordRepository repository,
-            IValidator<DTOs.CsvRowDto> rowValidator,
+            IValidator<CsvRowDto> rowValidator,
             IValidator<UploadCsvCommand> commandValidator)
         {
             _csvReader = csvReader;
@@ -34,29 +33,51 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
             UploadCsvCommand command,
             CancellationToken cancellationToken = default)
         {
-            var readResult = await _csvReader.ReadAsync(
-                command.FileStream,
-                cancellationToken);
+            var commandValidation =
+                await _commandValidator.ValidateAsync(
+                    command,
+                    cancellationToken);
 
-            var structureValidation = _structureValidator.Validate(
-                readResult.Headers);
-
-            if (!structureValidation.IsValid)
+            if (!commandValidation.IsValid)
             {
-                var errors = structureValidation.Errors
-                    .Select(error => new CsvUploadError(0, error))
+                var commandErrors = commandValidation.Errors
+                    .Select(error => new CsvUploadError(
+                        0,
+                        error.ErrorMessage))
                     .ToArray();
 
                 return new UploadCsvResult(
                     TotalRows: 0,
                     InsertedRows: 0,
                     DuplicateRows: 0,
-                    Errors: errors);
+                    Errors: commandErrors);
             }
 
-            var records = new List<ImportedRecord>();
-            var errorsList = new List<CsvUploadError>();
-            var duplicates = 0;
+            var readResult = await _csvReader.ReadAsync(
+                command.FileStream,
+                cancellationToken);
+
+            var structureValidation =
+                _structureValidator.Validate(
+                    readResult.Headers);
+
+            if (!structureValidation.IsValid)
+            {
+                var structureErrors = structureValidation.Errors
+                    .Select(error => new CsvUploadError(
+                        0,
+                        error))
+                    .ToArray();
+
+                return new UploadCsvResult(
+                    TotalRows: 0,
+                    InsertedRows: 0,
+                    DuplicateRows: 0,
+                    Errors: structureErrors);
+            }
+
+            var validRecords = new List<ImportedRecord>();
+            var errors = new List<CsvUploadError>();
 
             foreach (var row in readResult.Rows)
             {
@@ -69,7 +90,7 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
 
                 if (!validationResult.IsValid)
                 {
-                    errorsList.AddRange(
+                    errors.AddRange(
                         validationResult.Errors.Select(
                             error => new CsvUploadError(
                                 row.RowNumber,
@@ -78,43 +99,82 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
                     continue;
                 }
 
-                var record = CreateDomainRecord(row);
-
-                var exists =
-                    await _repository.ExistsByBusinessKeyAsync(
-                        record.BusinessKey,
-                        cancellationToken);
-
-                if (exists)
-                {
-                    record.MarkAsDuplicate();
-                    duplicates++;
-                }
-
-                records.Add(record);
+                validRecords.Add(
+                    CreateDomainRecord(row));
             }
 
-            var recordsToInsert = records
-                .Where(record =>
-                    record.Status != ImportRecordStatus.Duplicate)
-                .ToArray();
+            if (validRecords.Count == 0)
+            {
+                return new UploadCsvResult(
+                    TotalRows: readResult.Rows.Count,
+                    InsertedRows: 0,
+                    DuplicateRows: 0,
+                    Errors: errors);
+            }
 
-            if (recordsToInsert.Length > 0)
+            var duplicateKeys =
+                FindDuplicatesWithinFile(
+                    validRecords);
+
+            var businessKeys = validRecords
+                .Select(record => record.BusinessKey)
+                .ToHashSet();
+
+            var existingKeys =
+                await _repository.GetExistingBusinessKeysAsync(
+                    businessKeys,
+                    cancellationToken);
+
+            duplicateKeys.UnionWith(existingKeys);
+
+            var recordsToInsert = new List<ImportedRecord>();
+
+            foreach (var record in validRecords)
+            {
+                if (duplicateKeys.Contains(
+                        record.BusinessKey))
+                {
+                    record.MarkAsDuplicate();
+                    continue;
+                }
+
+                recordsToInsert.Add(record);
+            }
+
+            if (recordsToInsert.Count > 0)
             {
                 await _repository.AddRangeAsync(
                     recordsToInsert,
                     cancellationToken);
             }
 
+            var duplicateCount =
+                validRecords.Count -
+                recordsToInsert.Count;
+
             return new UploadCsvResult(
                 TotalRows: readResult.Rows.Count,
-                InsertedRows: recordsToInsert.Length,
-                DuplicateRows: duplicates,
-                Errors: errorsList);
+                InsertedRows: recordsToInsert.Count,
+                DuplicateRows: duplicateCount,
+                Errors: errors);
+        }
+
+        private static HashSet<Domain.ValueObjects.ImportedRecordKey>
+            FindDuplicatesWithinFile(
+                IReadOnlyCollection<ImportedRecord> records)
+        {
+            var duplicateKeys =
+                records
+                    .GroupBy(record => record.BusinessKey)
+                    .Where(group => group.Count() > 1)
+                    .Select(group => group.Key)
+                    .ToHashSet();
+
+            return duplicateKeys;
         }
 
         private static ImportedRecord CreateDomainRecord(
-            DTOs.CsvRowDto row)
+            CsvRowDto row)
         {
             var eventDate = DateOnly.ParseExact(
                 row.EventDate,
