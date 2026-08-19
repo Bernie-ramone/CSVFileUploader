@@ -1,4 +1,8 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using CSVFileUploader.Application.CSV.UploadCsv;
+using CSVFileUploader.Application.CSV.Validators;
+using CSVFileUploader.Application.DTOs;
+using FluentValidation;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace CSVFileUploader.Application
 {
@@ -8,6 +12,14 @@ namespace CSVFileUploader.Application
             this IServiceCollection services)
         {
             services.AddScoped<CSV.UploadCsv.UploadCsvCommandHandler>();
+
+            services.AddScoped<
+            IValidator<CsvRowDto>,
+            CsvRowValidator>();
+
+            services.AddScoped<
+                IValidator<UploadCsvCommand>,
+                UploadCsvCommandValidator>();
 
             return services;
         }

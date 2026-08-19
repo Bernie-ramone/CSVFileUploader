@@ -1,0 +1,206 @@
+﻿@page "/upload"
+@rendermode InteractiveServer
+
+@using Microsoft.AspNetCore.Components.Forms
+@using CSVFileUploader.Application.CSV.UploadCsv
+@using CSVFileUploader.Application.Common.Models
+
+@inject IServiceScopeFactory ScopeFactory
+
+<PageTitle>CSV File Uploader</PageTitle>
+
+<h1>CSV File Uploader</h1>
+
+<div class="card">
+    <div class="card-body">
+
+        <div class="mb-3">
+            <label class="form-label">
+                Select CSV file
+            </label>
+
+            <InputFile OnChange="HandleFileSelected"
+                       accept=".csv,text/csv" />
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_selectedFileName))
+        {
+            <div class="mb-3">
+                <strong>Selected file:</strong>
+                @_selectedFileName
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <div class="alert alert-danger">
+                @_errorMessage
+            </div>
+        }
+
+        <button type="button"
+                class="btn btn-primary"
+                disabled="@(!_canUpload || _isUploading)"
+                @onclick="UploadAsync">
+
+            @if (_isUploading)
+            {
+                <span>Uploading...</span>
+            }
+            else
+            {
+                <span>Upload</span>
+            }
+        </button>
+    </div>
+</div>
+
+@if (_result is not null)
+{
+    <div class="card mt-4">
+        <div class="card-header">
+            <h2 class="h5 mb-0">Upload Result</h2>
+        </div>
+
+        <div class="card-body">
+
+            <div class="row">
+                <div class="col-md-3">
+                    <strong>Total rows</strong>
+                    <div>@_result.TotalRows</div>
+                </div>
+
+                <div class="col-md-3">
+                    <strong>Inserted</strong>
+                    <div>@_result.InsertedRows</div>
+                </div>
+
+                <div class="col-md-3">
+                    <strong>Duplicates</strong>
+                    <div>@_result.DuplicateRows</div>
+                </div>
+
+                <div class="col-md-3">
+                    <strong>Errors</strong>
+                    <div>@_result.Errors.Count</div>
+                </div>
+            </div>
+
+            @if (_result.Errors.Count > 0)
+            {
+                <div class="mt-4">
+                    <h3 class="h6">Validation errors</h3>
+
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Row</th>
+                                <th>Error</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            @foreach (var error in _result.Errors)
+                            {
+                                <tr>
+                                    <td>
+                                        @(error.RowNumber == 0
+                                            ? "File"
+                                            : error.RowNumber)
+                                    </td>
+
+                                    <td>@error.Message</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private const long MaxFileSize = 10 * 1024 * 1024;
+
+    private IBrowserFile? _selectedFile;
+
+    private string? _selectedFileName;
+
+    private bool _isUploading;
+
+    private string? _errorMessage;
+
+    private bool _canUpload =>
+        _selectedFile is not null &&
+        !_isUploading;
+
+    private UploadCsvResult? _result;
+
+    private void HandleFileSelected(
+        InputFileChangeEventArgs args)
+    {
+        _result = null;
+        _errorMessage = null;
+
+        _selectedFile = args.File;
+
+        _selectedFileName = _selectedFile.Name;
+    }
+
+    private async Task UploadAsync()
+    {
+        if (_selectedFile is null)
+        {
+            return;
+        }
+
+        _isUploading = true;
+        _errorMessage = null;
+        _result = null;
+
+        try
+        {
+            await using var fileStream =
+                _selectedFile.OpenReadStream(
+                    MaxFileSize);
+
+            var command = new UploadCsvCommand(
+                FileStream: fileStream,
+                FileName: _selectedFile.Name,
+                ContentType: _selectedFile.ContentType,
+                FileSize: _selectedFile.Size);
+
+            using var scope =
+                ScopeFactory.CreateScope();
+
+            var handler =
+                scope.ServiceProvider
+                    .GetRequiredService<
+                        UploadCsvCommandHandler>();
+
+            _result = await handler.HandleAsync(
+                command);
+        }
+        catch (IOException ex)
+        {
+            _errorMessage =
+                $"The file could not be read: {ex.Message}";
+        }
+        catch (InvalidOperationException ex)
+        {
+            _errorMessage =
+                ex.Message;
+        }
+        catch (Exception)
+        {
+            _errorMessage =
+                "An unexpected error occurred while " +
+                "processing the file.";
+        }
+        finally
+        {
+            _isUploading = false;
+        }
+    }
+}
