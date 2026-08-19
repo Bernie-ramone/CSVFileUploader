@@ -112,9 +112,8 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
                     Errors: errors);
             }
 
-            var duplicateKeys =
-                FindDuplicatesWithinFile(
-                    validRecords);
+            var duplicateRecords =
+    FindDuplicatesWithinFile(validRecords);
 
             var businessKeys = validRecords
                 .Select(record => record.BusinessKey)
@@ -125,14 +124,18 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
                     businessKeys,
                     cancellationToken);
 
-            duplicateKeys.UnionWith(existingKeys);
-
-            var recordsToInsert = new List<ImportedRecord>();
+            var recordsToInsert =
+                new List<ImportedRecord>();
 
             foreach (var record in validRecords)
             {
-                if (duplicateKeys.Contains(
-                        record.BusinessKey))
+                var isDuplicateInFile =
+                    duplicateRecords.Contains(record);
+
+                var existsInDatabase =
+                    existingKeys.Contains(record.BusinessKey);
+
+                if (isDuplicateInFile || existsInDatabase)
                 {
                     record.MarkAsDuplicate();
                     continue;
@@ -159,18 +162,23 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
                 Errors: errors);
         }
 
-        private static HashSet<Domain.ValueObjects.ImportedRecordKey>
-            FindDuplicatesWithinFile(
-                IReadOnlyCollection<ImportedRecord> records)
+        private static HashSet<ImportedRecord> FindDuplicatesWithinFile(IReadOnlyCollection<ImportedRecord> records)
         {
-            var duplicateKeys =
-                records
-                    .GroupBy(record => record.BusinessKey)
-                    .Where(group => group.Count() > 1)
-                    .Select(group => group.Key)
-                    .ToHashSet();
+            var seenKeys =
+                new HashSet<Domain.ValueObjects.ImportedRecordKey>();
 
-            return duplicateKeys;
+            var duplicateRecords =
+                new HashSet<ImportedRecord>();
+
+            foreach (var record in records)
+            {
+                if (!seenKeys.Add(record.BusinessKey))
+                {
+                    duplicateRecords.Add(record);
+                }
+            }
+
+            return duplicateRecords;
         }
 
         private static ImportedRecord CreateDomainRecord(

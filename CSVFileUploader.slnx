@@ -9,5 +9,6 @@
     <Project Path="tests/CSVFileUploader.Application.Tests/CSVFileUploader.Application.Tests.csproj" Id="e2675cbd-cbed-4e49-b3d3-6baae0476335" />
     <Project Path="tests/CSVFileUploader.Domain.Tests/CSVFileUploader.Domain.Tests.csproj" Id="a0a1b9c9-cc96-4dec-b4e5-9ba71c751b13" />
     <Project Path="tests/CSVFileUploader.Infrastructure.Tests/CSVFileUploader.Infrastructure.Tests.csproj" Id="cc1dd310-68b0-4da7-a80f-50c37a6a9407" />
+    <Project Path="tests/CSVFileUploader.Integration.Tests/CSVFileUploader.Integration.Tests.csproj" Id="c79ed68a-559f-4baa-849a-6ae1da015dc8" />
   </Folder>
 </Solution>
