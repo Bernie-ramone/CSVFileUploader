@@ -4,6 +4,8 @@ using CSVFileUploader.Infrastructure.CSV;
 using CSVFileUploader.Infrastructure.Persistence.Repositories;
 using CSVFileUploader.Integration.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using CSVFileUploader.Application.Common.Models;
 
 namespace CSVFileUploader.Integration.Tests.Upload
 {
@@ -32,7 +34,9 @@ namespace CSVFileUploader.Integration.Tests.Upload
                 new CsvRowValidator();
 
             var commandValidator =
-                new UploadCsvCommandValidator();
+                new UploadCsvCommandValidator( new CsvUploadOptions());
+
+            var logger = NullLogger<UploadCsvCommandHandler>.Instance;
 
             var handler =
                 new UploadCsvCommandHandler(
@@ -40,7 +44,8 @@ namespace CSVFileUploader.Integration.Tests.Upload
                     structureValidator,
                     repository,
                     rowValidator,
-                    commandValidator);
+                    commandValidator,
+                    logger);
 
             var filePath = Path.Combine(
                 AppContext.BaseDirectory,

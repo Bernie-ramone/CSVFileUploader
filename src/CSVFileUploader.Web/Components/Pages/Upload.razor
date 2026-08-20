@@ -1,11 +1,12 @@
-﻿@page "/upload"
-@rendermode InteractiveServer
-
+﻿@using CSVFileUploader.Application.Common.Models
 @using Microsoft.AspNetCore.Components.Forms
 @using CSVFileUploader.Application.CSV.UploadCsv
-@using CSVFileUploader.Application.Common.Models
 
+@page "/upload"
+@rendermode InteractiveServer
+@inject CsvUploadOptions CsvUploadOptions
 @inject IServiceScopeFactory ScopeFactory
+@inject ILogger<Upload> Logger
 
 <PageTitle>CSV File Uploader</PageTitle>
 
@@ -120,8 +121,9 @@
     </div>
 }
 
+
+
 @code {
-    private const long MaxFileSize = 10 * 1024 * 1024;
 
     private IBrowserFile? _selectedFile;
 
@@ -163,7 +165,7 @@
         {
             await using var fileStream =
                 _selectedFile.OpenReadStream(
-                    MaxFileSize);
+                    CsvUploadOptions.MaximumFileSizeInBytes);
 
             var command = new UploadCsvCommand(
                 FileStream: fileStream,
@@ -184,16 +186,29 @@
         }
         catch (IOException ex)
         {
+            Logger.LogWarning(
+                ex,
+                "CSV upload failed while reading the file.");
+
             _errorMessage =
-                $"The file could not be read: {ex.Message}";
+                "The file could not be read.";
         }
         catch (InvalidOperationException ex)
         {
+            Logger.LogWarning(
+                ex,
+                "CSV upload failed due to an invalid operation.");
+
             _errorMessage =
                 ex.Message;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+
+            Logger.LogError(
+                ex,
+                "Unexpected error while processing CSV upload.");
+
             _errorMessage =
                 "An unexpected error occurred while " +
                 "processing the file.";

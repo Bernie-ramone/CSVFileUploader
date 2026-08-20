@@ -5,11 +5,15 @@ using CSVFileUploader.Application.DTOs;
 using CSVFileUploader.Domain.Entities;
 using CSVFileUploader.Domain.ValueObjects;
 using CSVFileUploader.Application.CSV.Validators;
+using Microsoft.Extensions.Logging.Abstractions;
+
 
 namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
 {
     public class UploadCsvCommandHandlerTests
     {
+        private readonly CsvUploadOptions _csvUploadOptions = new();
+
         [Fact]
         public async Task HandleAsync_WithValidRows_ShouldInsertRecords()
         {
@@ -26,16 +30,16 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
                     "Notes"
                     ],
                     [
-                        new CsvRowDto(
-    RowNumber: 2,
-    RecordId: "REC-0001",
-    AssetId: "AST-1001",
-    SourceSite: "MINE-NORTH",
-    DestinationSite: "PLANT-A",
-    EventDate: "2026-08-01",
-    Volume: "125.50",
-    Unit: "TON",
-    Notes: "Morning shift")
+                new CsvRowDto(
+                    RowNumber: 2,
+                    RecordId: "REC-0001",
+                    AssetId: "AST-1001",
+                    SourceSite: "MINE-NORTH",
+                    DestinationSite: "PLANT-A",
+                    EventDate: "2026-08-01",
+                    Volume: "125.50",
+                    Unit: "TON",
+                    Notes: "Morning shift")
                     ]));
 
             var structureValidator = new FakeStructureValidator(
@@ -43,14 +47,16 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
 
             var repository = new FakeImportedRecordRepository();
             var rowValidator = new CsvRowValidator();
-            var commandValidator = new UploadCsvCommandValidator();
+            var commandValidator = new UploadCsvCommandValidator(_csvUploadOptions);
+            var logger = NullLogger<UploadCsvCommandHandler>.Instance;
 
             var handler = new UploadCsvCommandHandler(
                 csvReader,
                 structureValidator,
                 repository,
                 rowValidator,
-                   commandValidator);
+                commandValidator, 
+                logger);
 
             await using var stream = new MemoryStream();
 
@@ -83,13 +89,16 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
 
             var repository = new FakeImportedRecordRepository();
             var rowValidator = new CsvRowValidator();
-            var commandValidator = new UploadCsvCommandValidator();
+            var commandValidator = new UploadCsvCommandValidator(_csvUploadOptions);
+            var logger = NullLogger<UploadCsvCommandHandler>.Instance;
+
             var handler = new UploadCsvCommandHandler(
                 csvReader,
                 structureValidator,
                 repository,
                 rowValidator,
-                commandValidator);
+                commandValidator,
+                logger);
 
             await using var stream = new MemoryStream();
 
@@ -140,14 +149,17 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
             var repository = new FakeImportedRecordRepository();
 
             var rowValidator = new CsvRowValidator();
-            var commandValidator = new UploadCsvCommandValidator();
+            var commandValidator = new UploadCsvCommandValidator(_csvUploadOptions);
+            var logger = NullLogger<UploadCsvCommandHandler>.Instance;
+
 
             var handler = new UploadCsvCommandHandler(
                 csvReader,
                 structureValidator,
                 repository,
                 rowValidator,
-                commandValidator);
+                commandValidator, 
+                logger);
 
             await using var stream = new MemoryStream();
 
@@ -221,7 +233,10 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
                 new CsvRowValidator();
 
             var commandValidator =
-                new UploadCsvCommandValidator();
+                new UploadCsvCommandValidator(_csvUploadOptions);
+
+            var logger = NullLogger<UploadCsvCommandHandler>.Instance;
+
 
             var handler =
                 new UploadCsvCommandHandler(
@@ -229,7 +244,8 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
                     structureValidator,
                     repository,
                     rowValidator,
-                    commandValidator);
+                    commandValidator,
+                    logger);
 
             await using var stream =
                 new MemoryStream();
@@ -344,7 +360,10 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
                 new CsvRowValidator();
 
             var commandValidator =
-                new UploadCsvCommandValidator();
+                new UploadCsvCommandValidator(_csvUploadOptions);
+
+            var logger = NullLogger<UploadCsvCommandHandler>.Instance;
+
 
             var handler =
                 new UploadCsvCommandHandler(
@@ -352,7 +371,8 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
                     structureValidator,
                     repository,
                     rowValidator,
-                    commandValidator);
+                    commandValidator,
+                    logger);
 
             await using var stream =
                 new MemoryStream();

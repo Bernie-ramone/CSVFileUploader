@@ -1,19 +1,22 @@
-﻿using CSVFileUploader.Application.CSV.UploadCsv;
+﻿using CSVFileUploader.Application.Common.Models;
+using CSVFileUploader.Application.CSV.UploadCsv;
 using FluentValidation;
 
 namespace CSVFileUploader.Application.CSV.Validators
 {
-    public sealed class UploadCsvCommandValidator
-    : AbstractValidator<UploadCsvCommand>
+    public sealed class UploadCsvCommandValidator : AbstractValidator<UploadCsvCommand>
     {
-        private const long MaximumFileSize = 10 * 1024 * 1024;
+        private readonly CsvUploadOptions _options;
 
-        public UploadCsvCommandValidator()
+        public UploadCsvCommandValidator(CsvUploadOptions options)
         {
+            _options = options;
+
             RuleFor(x => x.FileStream)
                 .NotNull()
                 .Must(stream => stream.CanRead)
-                .WithMessage("The uploaded file cannot be read.");
+                .WithMessage(
+                    "The uploaded file cannot be read.");
 
             RuleFor(x => x.FileName)
                 .NotEmpty()
@@ -22,14 +25,16 @@ namespace CSVFileUploader.Application.CSV.Validators
                         Path.GetExtension(fileName),
                         ".csv",
                         StringComparison.OrdinalIgnoreCase))
-                .WithMessage("The uploaded file must be a CSV file.");
+                .WithMessage(
+                    "The uploaded file must be a CSV file.");
 
             RuleFor(x => x.FileSize)
                 .GreaterThan(0)
-                .LessThanOrEqualTo(MaximumFileSize)
+                .LessThanOrEqualTo(
+                    _options.MaximumFileSizeInBytes)
                 .WithMessage(
                     $"The uploaded file cannot exceed " +
-                    $"{MaximumFileSize / 1024 / 1024} MB.");
+                    $"{_options.MaximumFileSizeInBytes / 1024 / 1024} MB.");
         }
     }
 }

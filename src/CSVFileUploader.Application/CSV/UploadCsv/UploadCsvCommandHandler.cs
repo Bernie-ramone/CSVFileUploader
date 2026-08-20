@@ -4,6 +4,8 @@ using CSVFileUploader.Application.DTOs;
 using CSVFileUploader.Domain.Entities;
 using FluentValidation;
 using System.Globalization;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CSVFileUploader.Application.CSV.UploadCsv
 {
@@ -14,29 +16,34 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
         private readonly IImportedRecordRepository _repository;
         private readonly IValidator<CsvRowDto> _rowValidator;
         private readonly IValidator<UploadCsvCommand> _commandValidator;
+        private readonly ILogger<UploadCsvCommandHandler> _logger;
+
+
 
         public UploadCsvCommandHandler(
             ICsvReader csvReader,
             ICsvStructureValidator structureValidator,
             IImportedRecordRepository repository,
             IValidator<CsvRowDto> rowValidator,
-            IValidator<UploadCsvCommand> commandValidator)
+            IValidator<UploadCsvCommand> commandValidator,
+            ILogger<UploadCsvCommandHandler> logger)
         {
             _csvReader = csvReader;
             _structureValidator = structureValidator;
             _repository = repository;
             _rowValidator = rowValidator;
             _commandValidator = commandValidator;
+            _logger = logger;
         }
 
-        public async Task<UploadCsvResult> HandleAsync(
-            UploadCsvCommand command,
-            CancellationToken cancellationToken = default)
+        public async Task<UploadCsvResult> HandleAsync(UploadCsvCommand command, CancellationToken cancellationToken = default)
         {
-            var commandValidation =
-                await _commandValidator.ValidateAsync(
-                    command,
-                    cancellationToken);
+            _logger.LogInformation(
+                "Starting CSV upload for file {FileName} with size {FileSize} bytes.", 
+                command.FileName, 
+                command.FileSize);
+            
+            var commandValidation = await _commandValidator.ValidateAsync(command, cancellationToken);
 
             if (!commandValidation.IsValid)
             {
@@ -56,6 +63,8 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
             var readResult = await _csvReader.ReadAsync(
                 command.FileStream,
                 cancellationToken);
+            
+            cancellationToken.ThrowIfCancellationRequested();
 
             var structureValidation =
                 _structureValidator.Validate(
@@ -154,6 +163,16 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
             var duplicateCount =
                 validRecords.Count -
                 recordsToInsert.Count;
+
+            _logger.LogInformation(
+                "CSV upload completed for file {FileName}. " +
+                "TotalRows={TotalRows}, InsertedRows={InsertedRows}, " +
+                "DuplicateRows={DuplicateRows}, ErrorRows={ErrorRows}.",
+                command.FileName,
+                readResult.Rows.Count,
+                recordsToInsert.Count,
+                duplicateCount,
+                errors.Count);
 
             return new UploadCsvResult(
                 TotalRows: readResult.Rows.Count,

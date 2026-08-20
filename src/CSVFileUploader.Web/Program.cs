@@ -1,11 +1,25 @@
 using CSVFileUploader.Web.Components;
 using CSVFileUploader.Application;
 using CSVFileUploader.Infrastructure;
+using CSVFileUploader.Application.Common.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var csvUploadOptions =
+    builder.Configuration
+        .GetSection(CsvUploadOptions.SectionName)
+        .Get<CsvUploadOptions>()
+    ?? new CsvUploadOptions();
+
+CsvUploadOptionsValidator.Validate(
+    csvUploadOptions);
+
+builder.Services.AddSingleton(
+    csvUploadOptions);
+
 builder.Services.AddApplication();
-builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddInfrastructure(
+    builder.Configuration);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()

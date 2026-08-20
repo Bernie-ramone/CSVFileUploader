@@ -1,14 +1,13 @@
-﻿using CSVFileUploader.Application.CSV.UploadCsv;
+﻿using CSVFileUploader.Application.Common.Models;
+using CSVFileUploader.Application.CSV.UploadCsv;
 using CSVFileUploader.Application.CSV.Validators;
-using System;
-using System.Collections.Generic;
-using System.Text;
+
 
 namespace CSVFileUploader.Application.Tests.CSV.Validators
 {
     public class UploadCsvCommandValidatorTests
     {
-        private readonly UploadCsvCommandValidator _validator = new();
+        private readonly UploadCsvCommandValidator _validator = new(new CsvUploadOptions());
 
         [Fact]
         public async Task ValidCsvCommand_ShouldPass()
