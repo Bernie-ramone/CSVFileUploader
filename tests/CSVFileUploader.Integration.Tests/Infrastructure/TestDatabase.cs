@@ -35,14 +35,16 @@ namespace CSVFileUploader.Integration.Tests.Infrastructure
 
         public async Task InitializeAsync()
         {
-            await using var context = CreateContext();
+            await using var context =
+                CreateContext();
 
             await context.Database.MigrateAsync();
         }
 
         public async ValueTask DisposeAsync()
         {
-            await using var context = CreateContext();
+            await using var context =
+                CreateContext();
 
             await context.Database.EnsureDeletedAsync();
         }

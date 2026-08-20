@@ -59,8 +59,8 @@ namespace CSVFileUploader.Infrastructure.Persistence.Repositories
         }
 
         public async Task AddRangeAsync(
-            IReadOnlyCollection<ImportedRecord> records,
-            CancellationToken cancellationToken = default)
+    IReadOnlyCollection<ImportedRecord> records,
+    CancellationToken cancellationToken = default)
         {
             if (records.Count == 0)
             {
@@ -69,9 +69,6 @@ namespace CSVFileUploader.Infrastructure.Persistence.Repositories
 
             await _context.ImportedRecords.AddRangeAsync(
                 records,
-                cancellationToken);
-
-            await _context.SaveChangesAsync(
                 cancellationToken);
         }
     }

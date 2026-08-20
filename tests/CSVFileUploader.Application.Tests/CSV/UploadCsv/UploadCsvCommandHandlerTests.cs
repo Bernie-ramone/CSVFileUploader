@@ -1,10 +1,11 @@
 ﻿using CSVFileUploader.Application.Common.Interfaces;
 using CSVFileUploader.Application.Common.Models;
 using CSVFileUploader.Application.CSV.UploadCsv;
+using CSVFileUploader.Application.CSV.Validators;
 using CSVFileUploader.Application.DTOs;
 using CSVFileUploader.Domain.Entities;
 using CSVFileUploader.Domain.ValueObjects;
-using CSVFileUploader.Application.CSV.Validators;
+using FluentValidation;
 using Microsoft.Extensions.Logging.Abstractions;
 
 
@@ -12,8 +13,6 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
 {
     public class UploadCsvCommandHandlerTests
     {
-        private readonly CsvUploadOptions _csvUploadOptions = new();
-
         [Fact]
         public async Task HandleAsync_WithValidRows_ShouldInsertRecords()
         {
@@ -30,33 +29,51 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
                     "Notes"
                     ],
                     [
-                new CsvRowDto(
-                    RowNumber: 2,
-                    RecordId: "REC-0001",
-                    AssetId: "AST-1001",
-                    SourceSite: "MINE-NORTH",
-                    DestinationSite: "PLANT-A",
-                    EventDate: "2026-08-01",
-                    Volume: "125.50",
-                    Unit: "TON",
-                    Notes: "Morning shift")
+                        new CsvRowDto(
+                        RowNumber: 2,
+                        RecordId: "REC-0001",
+                        AssetId: "AST-1001",
+                        SourceSite: "MINE-NORTH",
+                        DestinationSite: "PLANT-A",
+                        EventDate: "2026-08-01",
+                        Volume: "125.50",
+                        Unit: "TON",
+                        Notes: "Morning shift")
                     ]));
 
-            var structureValidator = new FakeStructureValidator(
-                CsvStructureValidationResult.Success());
+            var structureValidator =
+                new FakeStructureValidator(
+                    CsvStructureValidationResult.Success());
 
-            var repository = new FakeImportedRecordRepository();
-            var rowValidator = new CsvRowValidator();
-            var commandValidator = new UploadCsvCommandValidator(_csvUploadOptions);
-            var logger = NullLogger<UploadCsvCommandHandler>.Instance;
+            var recordRepository =
+                new FakeImportedRecordRepository();
 
-            var handler = new UploadCsvCommandHandler(
-                csvReader,
-                structureValidator,
-                repository,
-                rowValidator,
-                commandValidator, 
-                logger);
+            var uploadRepository =
+                new FakeUploadRepository();
+
+            var unitOfWork =
+                new FakeUnitOfWork();
+
+            var rowValidator =
+                new CsvRowValidator();
+
+            var commandValidator =
+                new UploadCsvCommandValidator(
+                    new CsvUploadOptions());
+
+            var logger =
+                NullLogger<UploadCsvCommandHandler>.Instance;
+
+            var handler =
+                CreateHandler(
+                    csvReader,
+                    structureValidator,
+                    recordRepository,
+                    uploadRepository,
+                    unitOfWork,
+                    rowValidator,
+                    commandValidator,
+                    logger);
 
             await using var stream = new MemoryStream();
 
@@ -66,13 +83,42 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
                 "text/csv",
                 100);
 
-            var result = await handler.HandleAsync(command);
+            var result =
+                await handler.HandleAsync(command);
 
             Assert.Equal(1, result.TotalRows);
             Assert.Equal(1, result.InsertedRows);
             Assert.Equal(0, result.DuplicateRows);
             Assert.Empty(result.Errors);
-            Assert.Single(repository.InsertedRecords);
+
+            Assert.Single(
+                recordRepository.InsertedRecords);
+
+            var upload =
+                Assert.Single(
+                    uploadRepository.Uploads);
+
+            Assert.Equal(
+                1,
+                upload.TotalRows);
+
+            Assert.Equal(
+                1,
+                upload.InsertedRows);
+
+            Assert.Equal(
+                0,
+                upload.DuplicateRows);
+
+            Assert.Equal(
+                0,
+                upload.ErrorRows);
+
+            Assert.Single(upload.Rows);
+
+            Assert.Equal(
+                1,
+                unitOfWork.SaveChangesCalls);
         }
 
         [Fact]
@@ -83,24 +129,43 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
                     ["RecordId"],
                     []));
 
-            var structureValidator = new FakeStructureValidator(
-                CsvStructureValidationResult.Failure(
-                    "Missing required columns."));
+            var structureValidator =
+                new FakeStructureValidator(
+                    CsvStructureValidationResult.Failure(
+                        "Missing required columns."));
 
-            var repository = new FakeImportedRecordRepository();
-            var rowValidator = new CsvRowValidator();
-            var commandValidator = new UploadCsvCommandValidator(_csvUploadOptions);
-            var logger = NullLogger<UploadCsvCommandHandler>.Instance;
+            var recordRepository =
+                new FakeImportedRecordRepository();
 
-            var handler = new UploadCsvCommandHandler(
-                csvReader,
-                structureValidator,
-                repository,
-                rowValidator,
-                commandValidator,
-                logger);
+            var uploadRepository =
+                new FakeUploadRepository();
 
-            await using var stream = new MemoryStream();
+            var unitOfWork =
+                new FakeUnitOfWork();
+
+            var rowValidator =
+                new CsvRowValidator();
+
+            var commandValidator =
+                new UploadCsvCommandValidator(
+                    new CsvUploadOptions());
+
+            var logger =
+                NullLogger<UploadCsvCommandHandler>.Instance;
+
+            var handler =
+                CreateHandler(
+                    csvReader,
+                    structureValidator,
+                    recordRepository,
+                    uploadRepository,
+                    unitOfWork,
+                    rowValidator,
+                    commandValidator,
+                    logger);
+
+            await using var stream =
+                new MemoryStream();
 
             var command = new UploadCsvCommand(
                 stream,
@@ -108,11 +173,30 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
                 "text/csv",
                 100);
 
-            var result = await handler.HandleAsync(command);
+            var result =
+                await handler.HandleAsync(command);
 
-            Assert.Equal(0, result.InsertedRows);
-            Assert.Single(result.Errors);
-            Assert.Empty(repository.InsertedRecords);
+            Assert.Equal(
+                0,
+                result.InsertedRows);
+
+            Assert.Single(
+                result.Errors);
+
+            Assert.Empty(
+                recordRepository.InsertedRecords);
+
+            var upload =
+                Assert.Single(
+                    uploadRepository.Uploads);
+
+            Assert.Equal(
+                Domain.Enums.CsvUploadStatus.Failed,
+                upload.Status);
+
+            Assert.Equal(
+                1,
+                unitOfWork.SaveChangesCalls);
         }
 
         [Fact]
@@ -122,46 +206,63 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
                 new CsvReadResult(
                     [
                         "RecordId",
-                "AssetId",
-                "SourceSite",
-                "DestinationSite",
-                "EventDate",
-                "Volume",
-                "Unit",
-                "Notes"
+                    "AssetId",
+                    "SourceSite",
+                    "DestinationSite",
+                    "EventDate",
+                    "Volume",
+                    "Unit",
+                    "Notes"
                     ],
                     [
                         new CsvRowDto(
-                    RowNumber: 2,
-                    RecordId: "REC-0001",
-                    AssetId: "INVALID",
-                    SourceSite: "MINE-NORTH",
-                    DestinationSite: "PLANT-A",
-                    EventDate: "2026-08-01",
-                    Volume: "125.50",
-                    Unit: "TON",
-                    Notes: "Invalid asset")
+                        RowNumber: 2,
+                        RecordId: "REC-0001",
+                        AssetId: "INVALID",
+                        SourceSite: "MINE-NORTH",
+                        DestinationSite: "PLANT-A",
+                        EventDate: "2026-08-01",
+                        Volume: "125.50",
+                        Unit: "TON",
+                        Notes: "Invalid asset")
                     ]));
 
-            var structureValidator = new FakeStructureValidator(
-                CsvStructureValidationResult.Success());
+            var structureValidator =
+                new FakeStructureValidator(
+                    CsvStructureValidationResult.Success());
 
-            var repository = new FakeImportedRecordRepository();
+            var recordRepository =
+                new FakeImportedRecordRepository();
 
-            var rowValidator = new CsvRowValidator();
-            var commandValidator = new UploadCsvCommandValidator(_csvUploadOptions);
-            var logger = NullLogger<UploadCsvCommandHandler>.Instance;
+            var uploadRepository =
+                new FakeUploadRepository();
 
+            var unitOfWork =
+                new FakeUnitOfWork();
 
-            var handler = new UploadCsvCommandHandler(
-                csvReader,
-                structureValidator,
-                repository,
-                rowValidator,
-                commandValidator, 
-                logger);
+            var rowValidator =
+                new CsvRowValidator();
 
-            await using var stream = new MemoryStream();
+            var commandValidator =
+                new UploadCsvCommandValidator(
+                    new CsvUploadOptions());
+
+            var logger =
+                NullLogger<UploadCsvCommandHandler>.Instance;
+
+            var handler =
+                CreateHandler(
+                    csvReader,
+                    structureValidator,
+                    recordRepository,
+                    uploadRepository,
+                    unitOfWork,
+                    rowValidator,
+                    commandValidator,
+                    logger);
+
+            await using var stream =
+                new MemoryStream();
 
             var command = new UploadCsvCommand(
                 stream,
@@ -169,18 +270,169 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
                 "text/csv",
                 100);
 
-            var result = await handler.HandleAsync(command);
-            var error = Assert.Single(result.Errors);
+            var result =
+                await handler.HandleAsync(command);
 
-            Assert.Equal(1, result.TotalRows);
-            Assert.Equal(0, result.InsertedRows);
-            Assert.Equal(0, result.DuplicateRows);
+            Assert.Equal(
+                1,
+                result.TotalRows);
 
-            Assert.Single(result.Errors);
+            Assert.Equal(
+                0,
+                result.InsertedRows);
 
-            Assert.Equal(2, error.RowNumber);
+            Assert.Equal(
+                0,
+                result.DuplicateRows);
 
-            Assert.Empty(repository.InsertedRecords);
+            var error =
+                Assert.Single(result.Errors);
+
+            Assert.Equal(
+                2,
+                error.RowNumber);
+
+            Assert.Empty(
+                recordRepository.InsertedRecords);
+
+            var upload =
+                Assert.Single(
+                    uploadRepository.Uploads);
+
+            Assert.Equal(
+                1,
+                upload.ErrorRows);
+
+            Assert.Single(upload.Rows);
+
+            Assert.Equal(
+                Domain.Enums.CsvUploadRowStatus.Invalid,
+                upload.Rows.First().Status);
+        }
+
+        [Fact]
+        public async Task HandleAsync_WithDuplicateRowsInFile_ShouldKeepFirstOccurrence()
+        {
+            var csvReader =
+                new FakeCsvReader(
+                    new CsvReadResult(
+                        [
+                            "RecordId",
+                        "AssetId",
+                        "SourceSite",
+                        "DestinationSite",
+                        "EventDate",
+                        "Volume",
+                        "Unit",
+                        "Notes"
+                        ],
+                        [
+                            new CsvRowDto(
+                            2,
+                            "REC-0012",
+                            "AST-1004",
+                            "MINE-EAST",
+                            "PLANT-C",
+                            "2026-08-05",
+                            "145.50",
+                            "TON",
+                            "First"),
+
+                        new CsvRowDto(
+                            3,
+                            "REC-0013",
+                            "AST-1004",
+                            "MINE-EAST",
+                            "PLANT-C",
+                            "2026-08-05",
+                            "145.50",
+                            "TON",
+                            "Duplicate")
+                        ]));
+
+            var structureValidator =
+                new FakeStructureValidator(
+                    CsvStructureValidationResult.Success());
+
+            var recordRepository =
+                new FakeImportedRecordRepository();
+
+            var uploadRepository =
+                new FakeUploadRepository();
+
+            var unitOfWork =
+                new FakeUnitOfWork();
+
+            var rowValidator =
+                new CsvRowValidator();
+
+            var commandValidator =
+                new UploadCsvCommandValidator(
+                    new CsvUploadOptions());
+
+            var logger =
+                NullLogger<UploadCsvCommandHandler>.Instance;
+
+            var handler =
+                CreateHandler(
+                    csvReader,
+                    structureValidator,
+                    recordRepository,
+                    uploadRepository,
+                    unitOfWork,
+                    rowValidator,
+                    commandValidator,
+                    logger);
+
+            await using var stream =
+                new MemoryStream();
+
+            var command = new UploadCsvCommand(
+                stream,
+                "test.csv",
+                "text/csv",
+                100);
+
+            var result =
+                await handler.HandleAsync(command);
+
+            Assert.Equal(2, result.TotalRows);
+            Assert.Equal(1, result.InsertedRows);
+            Assert.Equal(1, result.DuplicateRows);
+            Assert.Empty(result.Errors);
+
+            Assert.Single(
+                recordRepository.InsertedRecords);
+
+            var upload =
+                Assert.Single(
+                    uploadRepository.Uploads);
+
+            Assert.Equal(
+                1,
+                upload.InsertedRows);
+
+            Assert.Equal(
+                1,
+                upload.DuplicateRows);
+
+            Assert.Equal(
+                2,
+                upload.Rows.Count);
+
+            Assert.Equal(
+                Domain.Enums.CsvUploadRowStatus.Imported,
+                upload.Rows
+                    .OrderBy(x => x.RowNumber)
+                    .First()
+                    .Status);
+
+            Assert.Equal(
+                Domain.Enums.CsvUploadRowStatus.Duplicate,
+                upload.Rows
+                    .OrderBy(x => x.RowNumber)
+                    .Last()
+                    .Status);
         }
 
         [Fact]
@@ -199,50 +451,60 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
                     new CsvReadResult(
                         [
                             "RecordId",
-                    "AssetId",
-                    "SourceSite",
-                    "DestinationSite",
-                    "EventDate",
-                    "Volume",
-                    "Unit",
-                    "Notes"
+                        "AssetId",
+                        "SourceSite",
+                        "DestinationSite",
+                        "EventDate",
+                        "Volume",
+                        "Unit",
+                        "Notes"
                         ],
                         [
                             new CsvRowDto(
-                        RowNumber: 2,
-                        RecordId: "REC-0021",
-                        AssetId: "AST-1004",
-                        SourceSite: "MINE-EAST",
-                        DestinationSite: "PLANT-C",
-                        EventDate: "2026-08-05",
-                        Volume: "145.50",
-                        Unit: "TON",
-                        Notes: "Already exists")
+                            2,
+                            "REC-0021",
+                            "AST-1004",
+                            "MINE-EAST",
+                            "PLANT-C",
+                            "2026-08-05",
+                            "145.50",
+                            "TON",
+                            "Already exists")
                         ]));
 
             var structureValidator =
                 new FakeStructureValidator(
                     CsvStructureValidationResult.Success());
 
-            var repository =
+            var recordRepository =
                 new FakeImportedRecordRepository();
 
-            repository.ExistingKeys.Add(existingKey);
+            recordRepository.ExistingKeys.Add(
+                existingKey);
+
+            var uploadRepository =
+                new FakeUploadRepository();
+
+            var unitOfWork =
+                new FakeUnitOfWork();
 
             var rowValidator =
                 new CsvRowValidator();
 
             var commandValidator =
-                new UploadCsvCommandValidator(_csvUploadOptions);
+                new UploadCsvCommandValidator(
+                    new CsvUploadOptions());
 
-            var logger = NullLogger<UploadCsvCommandHandler>.Instance;
-
+            var logger =
+                NullLogger<UploadCsvCommandHandler>.Instance;
 
             var handler =
-                new UploadCsvCommandHandler(
+                CreateHandler(
                     csvReader,
                     structureValidator,
-                    repository,
+                    recordRepository,
+                    uploadRepository,
+                    unitOfWork,
                     rowValidator,
                     commandValidator,
                     logger);
@@ -263,7 +525,17 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
             Assert.Equal(0, result.InsertedRows);
             Assert.Equal(1, result.DuplicateRows);
             Assert.Empty(result.Errors);
-            Assert.Empty(repository.InsertedRecords);
+
+            Assert.Empty(
+                recordRepository.InsertedRecords);
+
+            var upload =
+                Assert.Single(
+                    uploadRepository.Uploads);
+
+            Assert.Equal(
+                Domain.Enums.CsvUploadRowStatus.Duplicate,
+                Assert.Single(upload.Rows).Status);
         }
 
         [Fact]
@@ -282,94 +554,104 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
                     new CsvReadResult(
                         [
                             "RecordId",
-                    "AssetId",
-                    "SourceSite",
-                    "DestinationSite",
-                    "EventDate",
-                    "Volume",
-                    "Unit",
-                    "Notes"
+                        "AssetId",
+                        "SourceSite",
+                        "DestinationSite",
+                        "EventDate",
+                        "Volume",
+                        "Unit",
+                        "Notes"
                         ],
                         [
-    new CsvRowDto(
-        RowNumber: 2,
-        RecordId: "REC-0001",
-        AssetId: "AST-1001",
-        SourceSite: "MINE-NORTH",
-        DestinationSite: "PLANT-A",
-        EventDate: "2026-08-01",
-        Volume: "125.50",
-        Unit: "TON",
-        Notes: "Valid"),
+                            new CsvRowDto(
+                            2,
+                            "REC-0001",
+                            "AST-1001",
+                            "MINE-NORTH",
+                            "PLANT-A",
+                            "2026-08-01",
+                            "125.50",
+                            "TON",
+                            "Valid"),
 
-    new CsvRowDto(
-        RowNumber: 3,
-        RecordId: "REC-0002",
-        AssetId: "AST-1002",
-        SourceSite: "MINE-NORTH",
-        DestinationSite: "PLANT-A",
-        EventDate: "2026-08-01",
-        Volume: "118.25",
-        Unit: "TON",
-        Notes: "Valid"),
+                        new CsvRowDto(
+                            3,
+                            "REC-0002",
+                            "AST-1002",
+                            "MINE-NORTH",
+                            "PLANT-A",
+                            "2026-08-01",
+                            "118.25",
+                            "TON",
+                            "Valid"),
 
-    new CsvRowDto(
-        RowNumber: 4,
-        RecordId: "REC-0003",
-        AssetId: "AST-1004",
-        SourceSite: "MINE-EAST",
-        DestinationSite: "PLANT-C",
-        EventDate: "2026-08-05",
-        Volume: "145.50",
-        Unit: "TON",
-        Notes: "Existing"),
+                        new CsvRowDto(
+                            4,
+                            "REC-0003",
+                            "AST-1004",
+                            "MINE-EAST",
+                            "PLANT-C",
+                            "2026-08-05",
+                            "145.50",
+                            "TON",
+                            "Existing"),
 
-    new CsvRowDto(
-        RowNumber: 5,
-        RecordId: "REC-0004",
-        AssetId: "AST-1004",
-        SourceSite: "MINE-EAST",
-        DestinationSite: "PLANT-C",
-        EventDate: "2026-08-05",
-        Volume: "145.50",
-        Unit: "TON",
-        Notes: "Duplicate"),
+                        new CsvRowDto(
+                            5,
+                            "REC-0004",
+                            "AST-1004",
+                            "MINE-EAST",
+                            "PLANT-C",
+                            "2026-08-05",
+                            "145.50",
+                            "TON",
+                            "Duplicate"),
 
-    new CsvRowDto(
-        RowNumber: 6,
-        RecordId: "REC-0005",
-        AssetId: "INVALID",
-        SourceSite: "MINE-NORTH",
-        DestinationSite: "PLANT-A",
-        EventDate: "2026-08-01",
-        Volume: "100.00",
-        Unit: "TON",
-        Notes: "Invalid")
-]));
+                        new CsvRowDto(
+                            6,
+                            "REC-0005",
+                            "INVALID",
+                            "MINE-NORTH",
+                            "PLANT-A",
+                            "2026-08-01",
+                            "100.00",
+                            "TON",
+                            "Invalid")
+                        ]));
 
             var structureValidator =
                 new FakeStructureValidator(
                     CsvStructureValidationResult.Success());
 
-            var repository =
+            var recordRepository =
                 new FakeImportedRecordRepository();
 
-            repository.ExistingKeys.Add(existingKey);
+            recordRepository.ExistingKeys.Add(
+                existingKey);
+
+            var uploadRepository =
+                new FakeUploadRepository();
+
+            var unitOfWork =
+                new FakeUnitOfWork();
 
             var rowValidator =
                 new CsvRowValidator();
 
             var commandValidator =
-                new UploadCsvCommandValidator(_csvUploadOptions);
+                new UploadCsvCommandValidator(
+                    new CsvUploadOptions());
 
-            var logger = NullLogger<UploadCsvCommandHandler>.Instance;
-
+            var logger =
+                NullLogger<UploadCsvCommandHandler>.Instance;
 
             var handler =
-                new UploadCsvCommandHandler(
+                CreateHandler(
                     csvReader,
                     structureValidator,
-                    repository,
+                    recordRepository,
+                    uploadRepository,
+                    unitOfWork,
                     rowValidator,
                     commandValidator,
                     logger);
@@ -391,20 +673,69 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
             Assert.Equal(2, result.DuplicateRows);
             Assert.Single(result.Errors);
 
-            var error = Assert.Single(result.Errors);
+            var error =
+                Assert.Single(result.Errors);
 
-            Assert.Equal(6, error.RowNumber);
+            Assert.Equal(
+                6,
+                error.RowNumber);
 
             Assert.Equal(
                 2,
-                repository.InsertedRecords.Count);
+                recordRepository.InsertedRecords.Count);
+
+            var upload =
+                Assert.Single(
+                    uploadRepository.Uploads);
+
+            Assert.Equal(
+                5,
+                upload.TotalRows);
+
+            Assert.Equal(
+                2,
+                upload.InsertedRows);
+
+            Assert.Equal(
+                2,
+                upload.DuplicateRows);
+
+            Assert.Equal(
+                1,
+                upload.ErrorRows);
+
+            Assert.Equal(
+                5,
+                upload.Rows.Count);
+        }
+
+        private static UploadCsvCommandHandler CreateHandler(
+            ICsvReader csvReader,
+            ICsvStructureValidator structureValidator,
+            IImportedRecordRepository recordRepository,
+            IUploadRepository uploadRepository,
+            IUnitOfWork unitOfWork,
+            IValidator<CsvRowDto> rowValidator,
+            IValidator<UploadCsvCommand> commandValidator,
+            Microsoft.Extensions.Logging.ILogger<UploadCsvCommandHandler> logger)
+        {
+            return new UploadCsvCommandHandler(
+                csvReader,
+                structureValidator,
+                recordRepository,
+                uploadRepository,
+                unitOfWork,
+                rowValidator,
+                commandValidator,
+                logger);
         }
 
         private sealed class FakeCsvReader : ICsvReader
         {
             private readonly CsvReadResult _result;
 
-            public FakeCsvReader(CsvReadResult result)
+            public FakeCsvReader(
+                CsvReadResult result)
             {
                 _result = result;
             }
@@ -417,7 +748,8 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
             }
         }
 
-        private sealed class FakeStructureValidator : ICsvStructureValidator
+        private sealed class FakeStructureValidator
+            : ICsvStructureValidator
         {
             private readonly CsvStructureValidationResult _result;
 
@@ -435,7 +767,7 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
         }
 
         private sealed class FakeImportedRecordRepository
-    : IImportedRecordRepository
+            : IImportedRecordRepository
         {
             public List<ImportedRecord> InsertedRecords { get; } = [];
 
@@ -461,6 +793,44 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
                 InsertedRecords.AddRange(records);
 
                 return Task.CompletedTask;
+            }
+        }
+
+        private sealed class FakeUploadRepository
+            : IUploadRepository
+        {
+            public List<CsvUpload> Uploads { get; } = [];
+
+            public Task AddAsync(
+                CsvUpload upload,
+                CancellationToken cancellationToken = default)
+            {
+                Uploads.Add(upload);
+
+                return Task.CompletedTask;
+            }
+
+            public Task<CsvUpload?> GetByIdAsync(
+                Guid id,
+                CancellationToken cancellationToken = default)
+            {
+                return Task.FromResult(
+                    Uploads.FirstOrDefault(
+                        upload => upload.Id == id));
+            }
+        }
+
+        private sealed class FakeUnitOfWork
+            : IUnitOfWork
+        {
+            public int SaveChangesCalls { get; private set; }
+
+            public Task<int> SaveChangesAsync(
+                CancellationToken cancellationToken = default)
+            {
+                SaveChangesCalls++;
+
+                return Task.FromResult(1);
             }
         }
     }

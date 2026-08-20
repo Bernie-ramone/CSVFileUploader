@@ -1,11 +1,13 @@
-﻿using CSVFileUploader.Application.CSV.UploadCsv;
+﻿using CSVFileUploader.Application.Common.Models;
+using CSVFileUploader.Application.CSV.UploadCsv;
 using CSVFileUploader.Application.CSV.Validators;
+using CSVFileUploader.Domain.Enums;
 using CSVFileUploader.Infrastructure.CSV;
+using CSVFileUploader.Infrastructure.Persistence;
 using CSVFileUploader.Infrastructure.Persistence.Repositories;
 using CSVFileUploader.Integration.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
-using CSVFileUploader.Application.Common.Models;
 
 namespace CSVFileUploader.Integration.Tests.Upload
 {
@@ -14,15 +16,25 @@ namespace CSVFileUploader.Integration.Tests.Upload
         [Fact]
         public async Task UploadCsv_WithRealCsvAndDatabase_ShouldProcessFile()
         {
-            await using var database = new Infrastructure.TestDatabase();
+            await using var database =
+                new TestDatabase();
 
             await database.InitializeAsync();
 
             await using var context =
                 database.CreateContext();
 
-            var repository =
-                new ImportedRecordRepository(context);
+            var recordRepository =
+                new ImportedRecordRepository(
+                    context);
+
+            var uploadRepository =
+                new UploadRepository(
+                    context);
+
+            var unitOfWork =
+                new UnitOfWork(
+                    context);
 
             var csvReader =
                 new CsvReader();
@@ -34,15 +46,19 @@ namespace CSVFileUploader.Integration.Tests.Upload
                 new CsvRowValidator();
 
             var commandValidator =
-                new UploadCsvCommandValidator( new CsvUploadOptions());
+                new UploadCsvCommandValidator(
+                    new CsvUploadOptions());
 
-            var logger = NullLogger<UploadCsvCommandHandler>.Instance;
+            var logger =
+                NullLogger<UploadCsvCommandHandler>.Instance;
 
             var handler =
                 new UploadCsvCommandHandler(
                     csvReader,
                     structureValidator,
-                    repository,
+                    recordRepository,
+                    uploadRepository,
+                    unitOfWork,
                     rowValidator,
                     commandValidator,
                     logger);
@@ -57,53 +73,83 @@ namespace CSVFileUploader.Integration.Tests.Upload
 
             var command =
                 new UploadCsvCommand(
-                    FileStream: stream,
-                    FileName: "mock_csv_upload_test.csv",
-                    ContentType: "text/csv",
-                    FileSize: stream.Length);
+                    stream,
+                    "mock_csv_upload_test.csv",
+                    "text/csv",
+                    stream.Length);
 
             var result =
                 await handler.HandleAsync(command);
 
-            Console.WriteLine($"TotalRows: {result.TotalRows}");
-            Console.WriteLine($"InsertedRows: {result.InsertedRows}");
-            Console.WriteLine($"DuplicateRows: {result.DuplicateRows}");
-            Console.WriteLine($"ErrorCount: {result.Errors.Count}");
+            Assert.Equal(
+                20,
+                result.TotalRows);
 
-            foreach (var error in result.Errors)
-            {
-                Console.WriteLine(
-                    $"Row {error.RowNumber}: {error.Message}");
-            }
+            Assert.Equal(
+                18,
+                result.InsertedRows);
 
+            Assert.Equal(
+                2,
+                result.DuplicateRows);
 
-            Assert.Equal(20, result.TotalRows);
-            Assert.Equal(18, result.InsertedRows);
-            Assert.Equal(2, result.DuplicateRows);
-            Assert.Empty(result.Errors);
-
-            //var persistedRecords =
-            //    await context.ImportedRecords.ToListAsync();
+            Assert.Empty(
+                result.Errors);
 
             var persistedRecords =
-    await context.ImportedRecords
-        .OrderBy(x => x.RecordId)
-        .ToListAsync();
-
-            foreach (var record in persistedRecords)
-            {
-                Console.WriteLine(
-                    $"{record.RecordId} | " +
-                    $"{record.AssetId} | " +
-                    $"{record.SourceSite} | " +
-                    $"{record.DestinationSite} | " +
-                    $"{record.EventDate:yyyy-MM-dd} | " +
-                    $"{record.Volume}");
-            }
+                await context.ImportedRecords
+                    .ToListAsync();
 
             Assert.Equal(
                 18,
                 persistedRecords.Count);
+
+            var upload =
+                await context.CsvUploads
+                    .Include(x => x.Rows)
+                    .SingleAsync();
+
+            Assert.Equal(
+                CsvUploadStatus.Completed,
+                upload.Status);
+
+            Assert.Equal(
+                20,
+                upload.TotalRows);
+
+            Assert.Equal(
+                18,
+                upload.InsertedRows);
+
+            Assert.Equal(
+                2,
+                upload.DuplicateRows);
+
+            Assert.Equal(
+                0,
+                upload.ErrorRows);
+
+            Assert.Equal(
+                20,
+                upload.Rows.Count);
+
+            Assert.Equal(
+                18,
+                upload.Rows.Count(
+                    row => row.Status ==
+                        CsvUploadRowStatus.Imported));
+
+            Assert.Equal(
+                2,
+                upload.Rows.Count(
+                    row => row.Status ==
+                        CsvUploadRowStatus.Duplicate));
+
+            Assert.Equal(
+                0,
+                upload.Rows.Count(
+                    row => row.Status ==
+                        CsvUploadRowStatus.Invalid));
         }
     }
 }

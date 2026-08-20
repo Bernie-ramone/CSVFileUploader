@@ -11,8 +11,11 @@ namespace CSVFileUploader.Infrastructure.Persistence
         {
         }
 
-        public DbSet<ImportedRecord> ImportedRecords =>
-            Set<ImportedRecord>();
+        public DbSet<ImportedRecord> ImportedRecords => Set<ImportedRecord>();
+
+        public DbSet<CsvUpload> CsvUploads => Set<CsvUpload>();
+
+        public DbSet<CsvUploadRow> CsvUploadRows => Set<CsvUploadRow>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

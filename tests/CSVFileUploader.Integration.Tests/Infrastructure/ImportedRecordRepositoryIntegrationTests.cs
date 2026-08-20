@@ -10,7 +10,8 @@ namespace CSVFileUploader.Integration.Tests.Infrastructure
         [Fact]
         public async Task Database_ShouldRejectDuplicateBusinessKey()
         {
-            await using var database = new TestDatabase();
+            await using var database =
+                new TestDatabase();
 
             await database.InitializeAsync();
 
@@ -18,7 +19,8 @@ namespace CSVFileUploader.Integration.Tests.Infrastructure
                 database.CreateContext();
 
             var repository =
-                new ImportedRecordRepository(context);
+                new ImportedRecordRepository(
+                    context);
 
             var firstRecord =
                 ImportedRecord.Create(
@@ -42,12 +44,20 @@ namespace CSVFileUploader.Integration.Tests.Infrastructure
                     "TON",
                     "Duplicate");
 
+            // Stage and commit the first record.
             await repository.AddRangeAsync(
                 [firstRecord]);
 
+            await context.SaveChangesAsync();
+
+            // Stage the duplicate record.
+            await repository.AddRangeAsync(
+                [duplicateRecord]);
+
+            // The database unique constraint should reject
+            // the duplicate when SaveChangesAsync is executed.
             await Assert.ThrowsAsync<DbUpdateException>(
-                () => repository.AddRangeAsync(
-                    [duplicateRecord]));
+                () => context.SaveChangesAsync());
         }
     }
 }

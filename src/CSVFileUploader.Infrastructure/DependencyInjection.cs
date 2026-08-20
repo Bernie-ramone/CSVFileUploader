@@ -26,9 +26,9 @@ namespace CSVFileUploader.Infrastructure
                         sqlOptions.EnableRetryOnFailure();
                     }));
 
-            services.AddScoped<IImportedRecordRepository,
-                ImportedRecordRepository>();
-
+            services.AddScoped<IImportedRecordRepository, ImportedRecordRepository>();
+            services.AddScoped<IUploadRepository, UploadRepository>();
+            services.AddScoped<IUnitOfWork, UnitOfWork>();
             services.AddScoped<ICsvReader, CSV.CsvReader>();
             services.AddScoped<ICsvStructureValidator, CSV.CsvStructureValidator>();
 
