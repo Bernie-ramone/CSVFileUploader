@@ -1,0 +1,198 @@
+﻿@page "/uploads/{UploadId:guid}"
+@rendermode InteractiveServer
+
+@using CSVFileUploader.Application.CSV.UploadHistory
+@using CSVFileUploader.Application.DTOs.UploadHistory
+
+@inject IServiceScopeFactory ScopeFactory
+
+<PageTitle>Upload Details</PageTitle>
+
+@if (_isLoading)
+{
+    <p>Loading...</p>
+}
+else if (_upload is null)
+{
+    <div class="alert alert-warning">
+        Upload was not found.
+    </div>
+
+    <a class="btn btn-secondary"
+       href="/uploads">
+        Back to history
+    </a>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Upload Details</h1>
+
+        <a class="btn btn-secondary"
+           href="/uploads">
+            Back to history
+        </a>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <dl class="row mb-0">
+
+                <dt class="col-sm-3">
+                    File
+                </dt>
+
+                <dd class="col-sm-9">
+                    @_upload.FileName
+                </dd>
+
+                <dt class="col-sm-3">
+                    Uploaded
+                </dt>
+
+                <dd class="col-sm-9">
+                    @_upload.UploadedAtUtc.ToLocalTime()
+                </dd>
+
+                <dt class="col-sm-3">
+                    Status
+                </dt>
+
+                <dd class="col-sm-9">
+                    @GetStatusText(_upload.Status)
+                </dd>
+
+                <dt class="col-sm-3">
+                    Total rows
+                </dt>
+
+                <dd class="col-sm-9">
+                    @_upload.TotalRows
+                </dd>
+
+                <dt class="col-sm-3">
+                    Inserted
+                </dt>
+
+                <dd class="col-sm-9">
+                    @_upload.InsertedRows
+                </dd>
+
+                <dt class="col-sm-3">
+                    Duplicates
+                </dt>
+
+                <dd class="col-sm-9">
+                    @_upload.DuplicateRows
+                </dd>
+
+                <dt class="col-sm-3">
+                    Errors
+                </dt>
+
+                <dd class="col-sm-9">
+                    @_upload.ErrorRows
+                </dd>
+
+            </dl>
+        </div>
+    </div>
+
+    <h2 class="h4">
+        Rows
+    </h2>
+
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Row</th>
+                <th>Record</th>
+                <th>Status</th>
+                <th>Error</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            @foreach (var row in _upload.Rows)
+            {
+                <tr>
+                    <td>@row.RowNumber</td>
+                    <td>@row.RecordId</td>
+                    <td>@GetRowStatusText(row.Status)</td>
+                    <td>@row.ErrorMessage</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    [Parameter]
+    public Guid UploadId { get; set; }
+
+    private UploadHistoryDetailDto? _upload;
+
+    private bool _isLoading = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            using var scope =
+                ScopeFactory.CreateScope();
+
+            var handler =
+                scope.ServiceProvider
+                    .GetRequiredService<
+                        GetUploadHistoryDetailsQueryHandler>();
+
+            _upload =
+                await handler.HandleAsync(
+                    new GetUploadHistoryDetailsQuery(
+                        UploadId));
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private static string GetStatusText(
+        CSVFileUploader.Domain.Enums.CsvUploadStatus status)
+    {
+        return status switch
+        {
+            CSVFileUploader.Domain.Enums.CsvUploadStatus.Completed
+                => "Completed",
+
+            CSVFileUploader.Domain.Enums.CsvUploadStatus.CompletedWithErrors
+                => "Completed with errors",
+
+            CSVFileUploader.Domain.Enums.CsvUploadStatus.Processing
+                => "Processing",
+
+            CSVFileUploader.Domain.Enums.CsvUploadStatus.Failed
+                => "Failed",
+
+            _ => "Unknown"
+        };
+    }
+
+    private static string GetRowStatusText(
+        CSVFileUploader.Domain.Enums.CsvUploadRowStatus status)
+    {
+        return status switch
+        {
+            CSVFileUploader.Domain.Enums.CsvUploadRowStatus.Imported
+                => "Imported",
+
+            CSVFileUploader.Domain.Enums.CsvUploadRowStatus.Duplicate
+                => "Duplicate",
+
+            CSVFileUploader.Domain.Enums.CsvUploadRowStatus.Invalid
+                => "Invalid",
+
+            _ => "Unknown"
+        };
+    }
+}

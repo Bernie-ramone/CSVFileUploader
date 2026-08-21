@@ -31,6 +31,7 @@ namespace CSVFileUploader.Infrastructure
             services.AddScoped<IUnitOfWork, UnitOfWork>();
             services.AddScoped<ICsvReader, CSV.CsvReader>();
             services.AddScoped<ICsvStructureValidator, CSV.CsvStructureValidator>();
+            services.AddScoped<IUploadHistoryRepository, UploadHistoryRepository>();
 
             return services;
         }
