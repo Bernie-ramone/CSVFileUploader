@@ -1,11 +1,12 @@
 ﻿using CSVFileUploader.Application.Common.Interfaces;
+using CSVFileUploader.Application.Common.Models;
 using CSVFileUploader.Application.DTOs.UploadHistory;
 using Microsoft.EntityFrameworkCore;
 
 namespace CSVFileUploader.Infrastructure.Persistence.Repositories
 {
     public sealed class UploadHistoryRepository
-        : IUploadHistoryRepository
+     : IUploadHistoryRepository
     {
         private readonly ApplicationDbContext _context;
 
@@ -15,31 +16,68 @@ namespace CSVFileUploader.Infrastructure.Persistence.Repositories
             _context = context;
         }
 
-        public async Task<IReadOnlyCollection<UploadHistoryItemDto>> GetHistoryAsync(CancellationToken cancellationToken = default)
+        public async Task<PagedResult<UploadHistoryItemDto>> GetHistoryAsync(
+                int pageNumber,
+                int pageSize,
+                CancellationToken cancellationToken = default)
         {
-            return await _context.CsvUploads
+            if (pageNumber < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(pageNumber));
+            }
+
+            if (pageSize < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(pageSize));
+            }
+
+            var query = _context.CsvUploads
                 .AsNoTracking()
-                .OrderByDescending(x => x.UploadedAtUtc)
-                .Select(x => new UploadHistoryItemDto(
-                    x.Id,
-                    x.FileName,
-                    x.UploadedAtUtc,
-                    x.TotalRows,
-                    x.InsertedRows,
-                    x.DuplicateRows,
-                    x.ErrorRows,
-                    x.Status))
-                .ToListAsync(cancellationToken);
+                .OrderByDescending(
+                    x => x.UploadedAtUtc);
+
+            var totalCount =
+                await query.CountAsync(
+                    cancellationToken);
+
+            var items =
+                await query
+                    .Skip(
+                        (pageNumber - 1) *
+                        pageSize)
+                    .Take(pageSize)
+                    .Select(x =>
+                        new UploadHistoryItemDto(
+                            x.Id,
+                            x.FileName,
+                            x.UploadedAtUtc,
+                            x.TotalRows,
+                            x.InsertedRows,
+                            x.DuplicateRows,
+                            x.ErrorRows,
+                            x.Status))
+                    .ToListAsync(
+                        cancellationToken);
+
+            return new PagedResult<UploadHistoryItemDto>(
+                items,
+                pageNumber,
+                pageSize,
+                totalCount);
         }
 
-        public async Task<UploadHistoryDetailDto?> GetDetailsAsync(Guid id, CancellationToken cancellationToken = default)
+        public async Task<UploadHistoryDetailDto?>
+            GetDetailsAsync(
+                Guid id,
+                CancellationToken cancellationToken = default)
         {
-            var upload = await _context.CsvUploads
-                .AsNoTracking()
-                .Include(x => x.Rows)
-                .SingleOrDefaultAsync(
-                    x => x.Id == id,
-                    cancellationToken);
+            var upload =
+                await _context.CsvUploads
+                    .AsNoTracking()
+                    .Include(x => x.Rows)
+                    .SingleOrDefaultAsync(
+                        x => x.Id == id,
+                        cancellationToken);
 
             if (upload is null)
             {
@@ -48,11 +86,12 @@ namespace CSVFileUploader.Infrastructure.Persistence.Repositories
 
             var rows = upload.Rows
                 .OrderBy(x => x.RowNumber)
-                .Select(x => new UploadHistoryRowDto(
-                    x.RowNumber,
-                    x.RecordId,
-                    x.Status,
-                    x.ErrorMessage))
+                .Select(x =>
+                    new UploadHistoryRowDto(
+                        x.RowNumber,
+                        x.RecordId,
+                        x.Status,
+                        x.ErrorMessage))
                 .ToArray();
 
             return new UploadHistoryDetailDto(

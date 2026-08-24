@@ -110,7 +110,7 @@
                     <tbody>
                         @foreach (var error in _result.Errors)
                         {
-                            <tr>
+                            <tr class="table-danger">
                                 <td>@(error.RowNumber == 0 ? "File" : error.RowNumber.ToString())</td>
                                 <td>@error.Message</td>
                             </tr>

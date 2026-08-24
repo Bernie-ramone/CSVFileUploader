@@ -50,14 +50,18 @@ namespace CSVFileUploader.Domain.Entities
         }
 
         public static CsvUploadRow Duplicate(
-            int rowNumber,
-            string? recordId)
+                int rowNumber,
+                string? recordId,
+                string reason)
         {
+            ArgumentException.ThrowIfNullOrWhiteSpace(
+                reason);
+
             return new CsvUploadRow(
                 rowNumber,
                 recordId,
                 CsvUploadRowStatus.Duplicate,
-                null);
+                reason);
         }
 
         public static CsvUploadRow Invalid(

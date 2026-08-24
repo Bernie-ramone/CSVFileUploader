@@ -2,6 +2,7 @@ using CSVFileUploader.Web.Components;
 using CSVFileUploader.Application;
 using CSVFileUploader.Infrastructure;
 using CSVFileUploader.Application.Common.Models;
+using CSVFileUploader.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,6 +25,8 @@ builder.Services.AddInfrastructure(
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+builder.Services.AddScoped<UiErrorHandler>();
 
 var app = builder.Build();
 

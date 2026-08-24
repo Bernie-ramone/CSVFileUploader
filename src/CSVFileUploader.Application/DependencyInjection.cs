@@ -22,6 +22,8 @@ namespace CSVFileUploader.Application
 
             services.AddScoped<GetUploadHistoryDetailsQueryHandler>();
 
+            services.AddScoped<CSV.UploadHistory.UploadIssuesCsvExporter>();
+
             return services;
         }
     }

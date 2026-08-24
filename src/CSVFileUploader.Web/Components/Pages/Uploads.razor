@@ -2,8 +2,11 @@
 @rendermode InteractiveServer
 
 @using CSVFileUploader.Application.CSV.UploadHistory
+@using CSVFileUploader.Application.Common.Models
 @using CSVFileUploader.Application.DTOs.UploadHistory
+@using CSVFileUploader.Web.Services
 
+@inject UiErrorHandler ErrorHandler
 @inject IServiceScopeFactory ScopeFactory
 
 <PageTitle>Upload History</PageTitle>
@@ -12,7 +15,17 @@
 
 @if (_isLoading)
 {
-    <p>Loading...</p>
+    <div class="d-flex align-items-center gap-2"
+         role="status">
+
+        <div class="spinner-border spinner-border-sm"
+             aria-hidden="true">
+        </div>
+
+        <span>
+            Loading upload history...
+        </span>
+    </div>
 }
 else if (!string.IsNullOrWhiteSpace(_errorMessage))
 {
@@ -20,10 +33,23 @@ else if (!string.IsNullOrWhiteSpace(_errorMessage))
         @_errorMessage
     </div>
 }
-else if (_uploads.Count == 0)
+else if (_result is null || _result.Items.Count == 0)
 {
-    <div class="alert alert-info">
-        No uploads have been processed yet.
+    <div class="card">
+        <div class="card-body text-center py-5">
+            <h2 class="h4">
+                No uploads yet
+            </h2>
+
+            <p class="text-muted">
+                Upload a CSV file to see its processing history here.
+            </p>
+
+            <a class="btn btn-primary"
+               href="/upload">
+                Upload CSV
+            </a>
+        </div>
     </div>
 }
 else
@@ -43,7 +69,7 @@ else
         </thead>
 
         <tbody>
-            @foreach (var upload in _uploads)
+            @foreach (var upload in _result.Items)
             {
                 <tr>
                     <td>
@@ -55,7 +81,7 @@ else
                     </td>
 
                     <td>
-                        @GetStatusText(upload.Status)
+                       <UploadStatusBadge Status="@upload.Status" />
                     </td>
 
                     <td>@upload.TotalRows</td>
@@ -76,10 +102,38 @@ else
             }
         </tbody>
     </table>
+
+    <div class="d-flex justify-content-between align-items-center mt-3">
+
+        <div>
+            Page @_result.PageNumber
+            of @_result.TotalPages
+
+            <span class="ms-2 text-muted">
+                (@_result.TotalCount total uploads)
+            </span>
+        </div>
+
+        <div>
+            <button class="btn btn-outline-secondary me-2"
+                    disabled="@(_result.PageNumber <= 1 || _isLoading)"
+                    @onclick="PreviousPageAsync">
+                Previous
+            </button>
+
+            <button class="btn btn-outline-primary"
+                    disabled="@(_result.PageNumber >= _result.TotalPages || _isLoading)"
+                    @onclick="NextPageAsync">
+                Next
+            </button>
+        </div>
+    </div>
 }
 
 @code {
-    private IReadOnlyCollection<UploadHistoryItemDto> _uploads = [];
+    private const int PageSize = 20;
+
+    private PagedResult<UploadHistoryItemDto>? _result;
 
     private bool _isLoading = true;
 
@@ -87,6 +141,39 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadPageAsync(1);
+    }
+
+    private async Task PreviousPageAsync()
+    {
+        if (_result is null ||
+            _result.PageNumber <= 1)
+        {
+            return;
+        }
+
+        await LoadPageAsync(
+            _result.PageNumber - 1);
+    }
+
+    private async Task NextPageAsync()
+    {
+        if (_result is null ||
+            _result.PageNumber >= _result.TotalPages)
+        {
+            return;
+        }
+
+        await LoadPageAsync(
+            _result.PageNumber + 1);
+    }
+
+    private async Task LoadPageAsync(
+        int pageNumber)
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
         try
         {
             using var scope =
@@ -97,34 +184,22 @@ else
                     .GetRequiredService<
                         GetUploadHistoryQueryHandler>();
 
-            _uploads =
+            _result =
                 await handler.HandleAsync(
-                    new GetUploadHistoryQuery());
+                    new GetUploadHistoryQuery(
+                        pageNumber,
+                        PageSize));
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             _errorMessage =
-                "Unable to load upload history.";
+                ErrorHandler.Handle(
+                    ex,
+                    "loading upload history");
         }
         finally
         {
             _isLoading = false;
         }
-    }
-
-    private static string GetStatusText(CSVFileUploader.Domain.Enums.CsvUploadStatus status)
-    {
-        return status switch
-        {
-            CSVFileUploader.Domain.Enums.CsvUploadStatus.Completed => "Completed",
-
-            CSVFileUploader.Domain.Enums.CsvUploadStatus.CompletedWithErrors => "Completed with errors",
-
-            CSVFileUploader.Domain.Enums.CsvUploadStatus.Processing => "Processing",
-
-            CSVFileUploader.Domain.Enums.CsvUploadStatus.Failed => "Failed",
-
-            _ => "Unknown"
-        };
     }
 }

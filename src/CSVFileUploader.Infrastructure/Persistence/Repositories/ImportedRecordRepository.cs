@@ -17,40 +17,43 @@ namespace CSVFileUploader.Infrastructure.Persistence.Repositories
         }
 
         public async Task<IReadOnlyCollection<ImportedRecordKey>>
-            GetExistingBusinessKeysAsync(
-                IReadOnlyCollection<ImportedRecordKey> businessKeys,
-                CancellationToken cancellationToken = default)
+     GetExistingBusinessKeysAsync(
+         IReadOnlyCollection<ImportedRecordKey> businessKeys,
+         CancellationToken cancellationToken = default)
         {
             if (businessKeys.Count == 0)
             {
                 return [];
             }
 
-            var assetIds = businessKeys
+            var requestedKeys =
+                businessKeys.ToHashSet();
+
+            var assetIds = requestedKeys
                 .Select(key => key.AssetId)
                 .Distinct()
                 .ToArray();
 
-            var eventDates = businessKeys
+            var eventDates = requestedKeys
                 .Select(key => key.EventDate)
                 .Distinct()
                 .ToArray();
 
-            var candidates = await _context.ImportedRecords
-                .AsNoTracking()
-                .Where(record =>
-                    assetIds.Contains(record.AssetId) &&
-                    eventDates.Contains(record.EventDate))
-                .Select(record => new ImportedRecordKey(
-                    record.AssetId,
-                    record.SourceSite,
-                    record.DestinationSite,
-                    record.EventDate,
-                    record.Volume))
-                .ToListAsync(cancellationToken);
-
-            var requestedKeys =
-                businessKeys.ToHashSet();
+            var candidates =
+                await _context.ImportedRecords
+                    .AsNoTracking()
+                    .Where(record =>
+                        assetIds.Contains(record.AssetId) &&
+                        eventDates.Contains(record.EventDate))
+                    .Select(record =>
+                        new ImportedRecordKey(
+                            record.AssetId,
+                            record.SourceSite,
+                            record.DestinationSite,
+                            record.EventDate,
+                            record.Volume))
+                    .ToListAsync(
+                        cancellationToken);
 
             return candidates
                 .Where(requestedKeys.Contains)

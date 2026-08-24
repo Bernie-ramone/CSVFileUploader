@@ -433,6 +433,9 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
                     .OrderBy(x => x.RowNumber)
                     .Last()
                     .Status);
+            Assert.Equal(
+                1,
+                recordRepository.GetExistingBusinessKeysCalls);
         }
 
         [Fact]
@@ -684,6 +687,10 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
                 2,
                 recordRepository.InsertedRecords.Count);
 
+            Assert.Equal(
+                1,
+                recordRepository.GetExistingBusinessKeysCalls);
+
             var upload =
                 Assert.Single(
                     uploadRepository.Uploads);
@@ -767,17 +774,25 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
         }
 
         private sealed class FakeImportedRecordRepository
-            : IImportedRecordRepository
+      : IImportedRecordRepository
         {
             public List<ImportedRecord> InsertedRecords { get; } = [];
 
             public HashSet<ImportedRecordKey> ExistingKeys { get; } = [];
+
+            public int GetExistingBusinessKeysCalls
+            {
+                get;
+                private set;
+            }
 
             public Task<IReadOnlyCollection<ImportedRecordKey>>
                 GetExistingBusinessKeysAsync(
                     IReadOnlyCollection<ImportedRecordKey> businessKeys,
                     CancellationToken cancellationToken = default)
             {
+                GetExistingBusinessKeysCalls++;
+
                 var result = businessKeys
                     .Where(ExistingKeys.Contains)
                     .ToArray();

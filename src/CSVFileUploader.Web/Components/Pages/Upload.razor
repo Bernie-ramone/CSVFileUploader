@@ -1,12 +1,16 @@
-﻿@using CSVFileUploader.Application.Common.Models
+﻿@page "/upload"
+@rendermode InteractiveServer
+
+@using CSVFileUploader.Application.Common.Models
 @using Microsoft.AspNetCore.Components.Forms
 @using CSVFileUploader.Application.CSV.UploadCsv
+@using CSVFileUploader.Web.Components.Shared
+@using CSVFileUploader.Web.Services
 
-@page "/upload"
-@rendermode InteractiveServer
+
 @inject CsvUploadOptions CsvUploadOptions
 @inject IServiceScopeFactory ScopeFactory
-@inject ILogger<Upload> Logger
+@inject UiErrorHandler ErrorHandler
 
 <PageTitle>CSV File Uploader</PageTitle>
 
@@ -46,6 +50,10 @@
 
             @if (_isUploading)
             {
+                <span class="spinner-border spinner-border-sm me-2"
+                      aria-hidden="true">
+                </span>
+
                 <span>Uploading...</span>
             }
             else
@@ -58,66 +66,81 @@
 
 @if (_result is not null)
 {
-    <div class="card mt-4">
-        <div class="card-header">
-            <h2 class="h5 mb-0">Upload Result</h2>
-        </div>
+    <div class="row g-3">
 
-        <div class="card-body">
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="text-muted">
+                        Total rows
+                    </div>
 
-            <div class="row">
-                <div class="col-md-3">
-                    <strong>Total rows</strong>
-                    <div>@_result.TotalRows</div>
-                </div>
-
-                <div class="col-md-3">
-                    <strong>Inserted</strong>
-                    <div>@_result.InsertedRows</div>
-                </div>
-
-                <div class="col-md-3">
-                    <strong>Duplicates</strong>
-                    <div>@_result.DuplicateRows</div>
-                </div>
-
-                <div class="col-md-3">
-                    <strong>Errors</strong>
-                    <div>@_result.Errors.Count</div>
+                    <div class="fs-3 fw-bold">
+                        @_result.TotalRows
+                    </div>
                 </div>
             </div>
-
-            @if (_result.Errors.Count > 0)
-            {
-                <div class="mt-4">
-                    <h3 class="h6">Validation errors</h3>
-
-                    <table class="table table-sm">
-                        <thead>
-                            <tr>
-                                <th>Row</th>
-                                <th>Error</th>
-                            </tr>
-                        </thead>
-
-                        <tbody>
-                            @foreach (var error in _result.Errors)
-                            {
-                                <tr>
-                                    <td>
-                                        @(error.RowNumber == 0
-                                            ? "File"
-                                            : error.RowNumber)
-                                    </td>
-
-                                    <td>@error.Message</td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            }
         </div>
+
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="text-muted">
+                        Inserted
+                    </div>
+
+                    <div class="fs-3 fw-bold text-success">
+                        @_result.InsertedRows
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="text-muted">
+                        Duplicates
+                    </div>
+
+                    <div class="fs-3 fw-bold text-warning">
+                        @_result.DuplicateRows
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="text-muted">
+                        Errors
+                    </div>
+
+                    <div class="fs-3 fw-bold text-danger">
+                        @_result.Errors.Count
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (_result.Errors.Count > 0)
+        {
+            <table class="csv-table">
+                <thead><tr><th>Row</th><th>Error</th></tr></thead>
+                <tbody>
+                    @foreach (var error in _result.Errors)
+                    {
+                        <tr class="table-danger">
+                            <td>@(error.RowNumber == 0 ? "File" : error.RowNumber.ToString())</td>
+                            <td>@error.Message</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+
     </div>
 }
 
@@ -184,34 +207,12 @@
             _result = await handler.HandleAsync(
                 command);
         }
-        catch (IOException ex)
-        {
-            Logger.LogWarning(
-                ex,
-                "CSV upload failed while reading the file.");
-
-            _errorMessage =
-                "The file could not be read.";
-        }
-        catch (InvalidOperationException ex)
-        {
-            Logger.LogWarning(
-                ex,
-                "CSV upload failed due to an invalid operation.");
-
-            _errorMessage =
-                ex.Message;
-        }
         catch (Exception ex)
         {
-
-            Logger.LogError(
-                ex,
-                "Unexpected error while processing CSV upload.");
-
             _errorMessage =
-                "An unexpected error occurred while " +
-                "processing the file.";
+                ErrorHandler.Handle(
+                    ex,
+                    "CSV file upload");
         }
         finally
         {

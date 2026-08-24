@@ -1,0 +1,54 @@
+﻿@using CSVFileUploader.Domain.Enums
+
+<span class="badge @GetCssClass(Status)">
+    @GetText(Status)
+</span>
+
+@code {
+    [Parameter]
+    public CsvUploadStatus Status { get; set; }
+
+    private static string GetCssClass(
+        CsvUploadStatus status)
+    {
+        return status switch
+        {
+            CsvUploadStatus.Completed =>
+                "bg-success",
+
+            CsvUploadStatus.CompletedWithErrors =>
+                "bg-warning text-dark",
+
+            CsvUploadStatus.Processing =>
+                "bg-primary",
+
+            CsvUploadStatus.Failed =>
+                "bg-danger",
+
+            _ =>
+                "bg-secondary"
+        };
+    }
+
+    private static string GetText(
+        CsvUploadStatus status)
+    {
+        return status switch
+        {
+            CsvUploadStatus.Completed =>
+                "Completed",
+
+            CsvUploadStatus.CompletedWithErrors =>
+                "Completed with errors",
+
+            CsvUploadStatus.Processing =>
+                "Processing",
+
+            CsvUploadStatus.Failed =>
+                "Failed",
+
+            _ =>
+                "Unknown"
+        };
+    }
+}

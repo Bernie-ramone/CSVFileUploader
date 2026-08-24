@@ -15,7 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\CSVFileUploader.Application\CSVFileUploader.Application.csproj" />
+    <ProjectReference Include="..\..\src\CSVFileUploader.Web\CSVFileUploader.Web.csproj" />
   </ItemGroup>
 
   <ItemGroup>

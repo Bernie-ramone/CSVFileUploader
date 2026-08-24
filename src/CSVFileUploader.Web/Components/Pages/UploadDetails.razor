@@ -3,14 +3,37 @@
 
 @using CSVFileUploader.Application.CSV.UploadHistory
 @using CSVFileUploader.Application.DTOs.UploadHistory
+@using CSVFileUploader.Web.Components.Shared
+@using Microsoft.JSInterop
+@using CSVFileUploader.Web.Services
+
+@inject UiErrorHandler ErrorHandler
+@inject IJSRuntime JS
+@inject UploadIssuesCsvExporter IssuesCsvExporter
 
 @inject IServiceScopeFactory ScopeFactory
 
 <PageTitle>Upload Details</PageTitle>
 
-@if (_isLoading)
+@if (!string.IsNullOrWhiteSpace(_errorMessage))
 {
-    <p>Loading...</p>
+    <div class="alert alert-danger">
+        @_errorMessage
+    </div>
+}
+else if (_isLoading)
+{
+    <div class="d-flex align-items-center gap-2"
+         role="status">
+
+        <div class="spinner-border spinner-border-sm"
+             aria-hidden="true">
+        </div>
+
+        <span>
+            Loading upload details...
+        </span>
+    </div>
 }
 else if (_upload is null)
 {
@@ -59,7 +82,7 @@ else
                 </dt>
 
                 <dd class="col-sm-9">
-                    @GetStatusText(_upload.Status)
+                   <UploadStatusBadge Status="@_upload.Status" />
                 </dd>
 
                 <dt class="col-sm-3">
@@ -98,6 +121,17 @@ else
         </div>
     </div>
 
+    @if (_upload.Rows.Any(row => row.Status != CSVFileUploader.Domain.Enums.CsvUploadRowStatus.Imported))
+    {
+        <div class="mb-4">
+            <button type="button"
+                    class="btn btn-outline-danger"  @onclick="DownloadIssuesCsvAsync">
+
+                Download Issues CSV
+            </button>
+        </div>
+    }
+
     <h2 class="h4">
         Rows
     </h2>
@@ -108,7 +142,7 @@ else
                 <th>Row</th>
                 <th>Record</th>
                 <th>Status</th>
-                <th>Error</th>
+                <th>Message</th>
             </tr>
         </thead>
 
@@ -118,7 +152,7 @@ else
                 <tr>
                     <td>@row.RowNumber</td>
                     <td>@row.RecordId</td>
-                    <td>@GetRowStatusText(row.Status)</td>
+                    <UploadRowStatusBadge Status="@row.Status" />
                     <td>@row.ErrorMessage</td>
                 </tr>
             }
@@ -133,6 +167,8 @@ else
     private UploadHistoryDetailDto? _upload;
 
     private bool _isLoading = true;
+
+    private string? _errorMessage;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -151,48 +187,43 @@ else
                     new GetUploadHistoryDetailsQuery(
                         UploadId));
         }
+        catch (Exception ex)
+        {
+            _errorMessage =
+                ErrorHandler.Handle(
+                    ex,
+                    "loading upload details");
+        }
         finally
         {
             _isLoading = false;
         }
     }
 
-    private static string GetStatusText(
-        CSVFileUploader.Domain.Enums.CsvUploadStatus status)
+    private async Task DownloadIssuesCsvAsync()
     {
-        return status switch
+        if (_upload is null)
         {
-            CSVFileUploader.Domain.Enums.CsvUploadStatus.Completed
-                => "Completed",
+            return;
+        }
 
-            CSVFileUploader.Domain.Enums.CsvUploadStatus.CompletedWithErrors
-                => "Completed with errors",
+        var exporter =
+            IssuesCsvExporter;
 
-            CSVFileUploader.Domain.Enums.CsvUploadStatus.Processing
-                => "Processing",
+        var bytes =
+            exporter.Export(_upload);
 
-            CSVFileUploader.Domain.Enums.CsvUploadStatus.Failed
-                => "Failed",
+        var base64 =
+            Convert.ToBase64String(bytes);
 
-            _ => "Unknown"
-        };
-    }
+        var fileName =
+            $"issues-{Path.GetFileNameWithoutExtension(
+                _upload.FileName)}.csv";
 
-    private static string GetRowStatusText(
-        CSVFileUploader.Domain.Enums.CsvUploadRowStatus status)
-    {
-        return status switch
-        {
-            CSVFileUploader.Domain.Enums.CsvUploadRowStatus.Imported
-                => "Imported",
-
-            CSVFileUploader.Domain.Enums.CsvUploadRowStatus.Duplicate
-                => "Duplicate",
-
-            CSVFileUploader.Domain.Enums.CsvUploadRowStatus.Invalid
-                => "Invalid",
-
-            _ => "Unknown"
-        };
+        await JS.InvokeVoidAsync(
+            "csvFileUploader.download",
+            fileName,
+            "text/csv;charset=utf-8",
+            base64);
     }
 }

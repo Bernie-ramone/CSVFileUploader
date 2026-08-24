@@ -29,11 +29,12 @@ namespace CSVFileUploader.Domain.Tests.Entities
         {
             var row = CsvUploadRow.Duplicate(
                 rowNumber: 5,
-                recordId: "REC-0005");
+                recordId: "REC-0005",
+                reason: "Record already exists in the database.");
 
             Assert.Equal(
-                CsvUploadRowStatus.Duplicate,
-                row.Status);
+                        "Record already exists in the database.",
+                        row.ErrorMessage);
         }
 
         [Fact]

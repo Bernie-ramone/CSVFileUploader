@@ -1,8 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace CSVFileUploader.Application.CSV.UploadHistory
+﻿namespace CSVFileUploader.Application.CSV.UploadHistory
 {
-    public sealed record GetUploadHistoryQuery;
+    public sealed record GetUploadHistoryQuery(
+     int PageNumber = 1,
+     int PageSize = 20);
 }
