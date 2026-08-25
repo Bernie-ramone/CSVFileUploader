@@ -1,16 +1,17 @@
 ﻿@page "/uploads/{UploadId:guid}"
+@attribute [Authorize]
 @rendermode InteractiveServer
 
 @using CSVFileUploader.Application.CSV.UploadHistory
 @using CSVFileUploader.Application.DTOs.UploadHistory
 @using CSVFileUploader.Web.Components.Shared
-@using Microsoft.JSInterop
 @using CSVFileUploader.Web.Services
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.JSInterop
 
 @inject UiErrorHandler ErrorHandler
 @inject IJSRuntime JS
 @inject UploadIssuesCsvExporter IssuesCsvExporter
-
 @inject IServiceScopeFactory ScopeFactory
 
 <PageTitle>Upload Details</PageTitle>
@@ -82,7 +83,7 @@ else
                 </dt>
 
                 <dd class="col-sm-9">
-                   <UploadStatusBadge Status="@_upload.Status" />
+                    <UploadStatusBadge Status="@_upload.Status" />
                 </dd>
 
                 <dt class="col-sm-3">
@@ -121,11 +122,15 @@ else
         </div>
     </div>
 
-    @if (_upload.Rows.Any(row => row.Status != CSVFileUploader.Domain.Enums.CsvUploadRowStatus.Imported))
+    @if (_upload.Rows.Any(
+            row =>
+                row.Status !=
+                CSVFileUploader.Domain.Enums.CsvUploadRowStatus.Imported))
     {
         <div class="mb-4">
             <button type="button"
-                    class="btn btn-outline-danger"  @onclick="DownloadIssuesCsvAsync">
+                    class="btn btn-outline-danger"
+                    @onclick="DownloadIssuesCsvAsync">
 
                 Download Issues CSV
             </button>
@@ -150,10 +155,19 @@ else
             @foreach (var row in _upload.Rows)
             {
                 <tr>
-                    <td>@row.RowNumber</td>
-                    <td>@row.RecordId</td>
+                    <td>
+                        @row.RowNumber
+                    </td>
+
+                    <td>
+                        @row.RecordId
+                    </td>
+
                     <UploadRowStatusBadge Status="@row.Status" />
-                    <td>@row.ErrorMessage</td>
+
+                    <td>
+                        @row.ErrorMessage
+                    </td>
                 </tr>
             }
         </tbody>
@@ -207,14 +221,13 @@ else
             return;
         }
 
-        var exporter =
-            IssuesCsvExporter;
-
         var bytes =
-            exporter.Export(_upload);
+            IssuesCsvExporter.Export(
+                _upload);
 
         var base64 =
-            Convert.ToBase64String(bytes);
+            Convert.ToBase64String(
+                bytes);
 
         var fileName =
             $"issues-{Path.GetFileNameWithoutExtension(

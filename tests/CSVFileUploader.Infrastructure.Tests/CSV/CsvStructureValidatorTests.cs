@@ -1,11 +1,9 @@
 ﻿using CSVFileUploader.Application.Common.Models;
 using CSVFileUploader.Infrastructure.CSV;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace CSVFileUploader.Infrastructure.Tests.CSV
 {
+
     public class CsvStructureValidatorTests
     {
         private readonly CsvStructureValidator _validator = new();
@@ -13,8 +11,9 @@ namespace CSVFileUploader.Infrastructure.Tests.CSV
         [Fact]
         public void Validate_WithExpectedHeaders_ShouldBeValid()
         {
-            var result = _validator.Validate(
-                CsvFileDefinition.OrderedHeaders);
+            var result =
+                _validator.Validate(
+                    CsvFileDefinition.OrderedHeaders);
 
             Assert.True(result.IsValid);
             Assert.Empty(result.Errors);
@@ -25,16 +24,22 @@ namespace CSVFileUploader.Infrastructure.Tests.CSV
         {
             var headers =
                 CsvFileDefinition.OrderedHeaders
-                    .Where(x => x != CsvFileDefinition.AssetId)
+                    .Where(
+                        x =>
+                            x !=
+                            CsvFileDefinition.AssetId)
                     .ToArray();
 
-            var result = _validator.Validate(headers);
+            var result =
+                _validator.Validate(headers);
 
             Assert.False(result.IsValid);
 
             Assert.Contains(
                 result.Errors,
-                error => error.Contains("AssetId"));
+                error =>
+                    error.Contains(
+                        "AssetId"));
         }
 
         [Fact]
@@ -42,17 +47,19 @@ namespace CSVFileUploader.Infrastructure.Tests.CSV
         {
             var headers =
                 CsvFileDefinition.OrderedHeaders
-                    .Select(x => x)
                     .Append("UnexpectedColumn")
                     .ToArray();
 
-            var result = _validator.Validate(headers);
+            var result =
+                _validator.Validate(headers);
 
             Assert.False(result.IsValid);
 
             Assert.Contains(
                 result.Errors,
-                error => error.Contains("UnexpectedColumn"));
+                error =>
+                    error.Contains(
+                        "UnexpectedColumn"));
         }
 
         [Fact]
@@ -60,28 +67,132 @@ namespace CSVFileUploader.Infrastructure.Tests.CSV
         {
             var headers =
                 CsvFileDefinition.OrderedHeaders
-                    .Append(CsvFileDefinition.AssetId)
+                    .Append(
+                        CsvFileDefinition.AssetId)
                     .ToArray();
 
-            var result = _validator.Validate(headers);
+            var result =
+                _validator.Validate(headers);
 
             Assert.False(result.IsValid);
 
             Assert.Contains(
                 result.Errors,
-                error => error.Contains("Duplicate column"));
+                error =>
+                    error.Contains(
+                        "Duplicate column"));
         }
 
         [Fact]
         public void Validate_WithIncorrectOrder_ShouldBeInvalid()
         {
-            var headers = CsvFileDefinition.OrderedHeaders
-                .Reverse()
-                .ToArray();
+            var headers =
+                CsvFileDefinition.OrderedHeaders
+                    .Reverse()
+                    .ToArray();
 
-            var result = _validator.Validate(headers);
+            var result =
+                _validator.Validate(headers);
 
             Assert.False(result.IsValid);
+        }
+
+        [Fact]
+        public void Validate_WithWhitespaceAroundHeaders_ShouldBeValid()
+        {
+            var headers =
+                CsvFileDefinition.OrderedHeaders
+                    .Select(
+                        header =>
+                            $"  {header}  ")
+                    .ToArray();
+
+            var result =
+                _validator.Validate(headers);
+
+            Assert.True(result.IsValid);
+            Assert.Empty(result.Errors);
+        }
+
+        [Fact]
+        public void Validate_WithEmptyHeader_ShouldBeInvalid()
+        {
+            var headers =
+                CsvFileDefinition.OrderedHeaders
+                    .ToArray();
+
+            headers[2] = string.Empty;
+
+            var result =
+                _validator.Validate(headers);
+
+            Assert.False(result.IsValid);
+
+            Assert.Contains(
+                result.Errors,
+                error =>
+                    error.Contains(
+                        "empty header"));
+        }
+
+        [Fact]
+        public void Validate_WithWhitespaceOnlyHeader_ShouldBeInvalid()
+        {
+            var headers =
+                CsvFileDefinition.OrderedHeaders
+                    .ToArray();
+
+            headers[2] = "   ";
+
+            var result =
+                _validator.Validate(headers);
+
+            Assert.False(result.IsValid);
+
+            Assert.Contains(
+                result.Errors,
+                error =>
+                    error.Contains(
+                        "empty header"));
+        }
+
+        [Fact]
+        public void Validate_WithNullHeader_ShouldBeInvalid()
+        {
+            var headers =
+                CsvFileDefinition.OrderedHeaders
+                    .Cast<string?>()
+                    .ToArray();
+
+            headers[2] = null;
+
+            var result =
+                _validator.Validate(
+                    headers!);
+
+            Assert.False(result.IsValid);
+
+            Assert.Contains(
+                result.Errors,
+                error =>
+                    error.Contains(
+                        "empty header"));
+        }
+
+        [Fact]
+        public void Validate_WithNoHeaders_ShouldBeInvalid()
+        {
+            var result =
+                _validator.Validate(
+                    Array.Empty<string>());
+
+            Assert.False(result.IsValid);
+
+            Assert.Contains(
+                result.Errors,
+                error =>
+                    error.Contains(
+                        "does not contain any columns"));
         }
     }
 }

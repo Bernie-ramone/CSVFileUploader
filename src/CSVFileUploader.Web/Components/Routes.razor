@@ -1,6 +1,47 @@
-﻿<Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+﻿@using Microsoft.AspNetCore.Components.Authorization
+
+<Router AppAssembly="typeof(Program).Assembly"
+        NotFoundPage="typeof(Pages.NotFound)">
+
     <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
-        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+
+        <AuthorizeRouteView RouteData="routeData"
+                            DefaultLayout="typeof(Layout.MainLayout)">
+
+            <NotAuthorized>
+                <div class="alert alert-warning">
+                    <h2>Authentication required</h2>
+
+                    <p>
+                        You must sign in to access this page.
+                    </p>
+
+                    <a class="btn btn-primary"
+                       href="/Identity/Account/Login">
+                        Sign in
+                    </a>
+                </div>
+            </NotAuthorized>
+
+            <Authorizing>
+                <div class="d-flex align-items-center gap-2"
+                     role="status">
+
+                    <div class="spinner-border spinner-border-sm"
+                         aria-hidden="true">
+                    </div>
+
+                    <span>
+                        Checking authentication...
+                    </span>
+                </div>
+            </Authorizing>
+
+        </AuthorizeRouteView>
+
+        <FocusOnNavigate RouteData="routeData"
+                         Selector="h1" />
+
     </Found>
+
 </Router>

@@ -1,10 +1,12 @@
 ﻿@page "/uploads"
+@attribute [Authorize]
 @rendermode InteractiveServer
 
 @using CSVFileUploader.Application.CSV.UploadHistory
 @using CSVFileUploader.Application.Common.Models
 @using CSVFileUploader.Application.DTOs.UploadHistory
 @using CSVFileUploader.Web.Services
+@using Microsoft.AspNetCore.Authorization
 
 @inject UiErrorHandler ErrorHandler
 @inject IServiceScopeFactory ScopeFactory
@@ -33,7 +35,8 @@ else if (!string.IsNullOrWhiteSpace(_errorMessage))
         @_errorMessage
     </div>
 }
-else if (_result is null || _result.Items.Count == 0)
+else if (_result is null ||
+         _result.Items.Count == 0)
 {
     <div class="card">
         <div class="card-body text-center py-5">
@@ -81,16 +84,25 @@ else
                     </td>
 
                     <td>
-                       <UploadStatusBadge Status="@upload.Status" />
+                        <UploadStatusBadge
+                            Status="@upload.Status" />
                     </td>
 
-                    <td>@upload.TotalRows</td>
+                    <td>
+                        @upload.TotalRows
+                    </td>
 
-                    <td>@upload.InsertedRows</td>
+                    <td>
+                        @upload.InsertedRows
+                    </td>
 
-                    <td>@upload.DuplicateRows</td>
+                    <td>
+                        @upload.DuplicateRows
+                    </td>
 
-                    <td>@upload.ErrorRows</td>
+                    <td>
+                        @upload.ErrorRows
+                    </td>
 
                     <td>
                         <a class="btn btn-sm btn-outline-primary"

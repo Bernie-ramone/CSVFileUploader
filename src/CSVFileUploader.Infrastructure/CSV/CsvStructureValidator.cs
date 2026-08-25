@@ -3,28 +3,49 @@ using CSVFileUploader.Application.Common.Models;
 
 namespace CSVFileUploader.Infrastructure.CSV
 {
+
     public sealed class CsvStructureValidator
-    : ICsvStructureValidator
+        : ICsvStructureValidator
     {
         public CsvStructureValidationResult Validate(
             IReadOnlyCollection<string> headers)
         {
-            if (headers.Count == 0)
+            if (headers is null ||
+                headers.Count == 0)
             {
                 return CsvStructureValidationResult.Failure(
                     "The CSV file does not contain any columns.");
             }
 
-            var normalizedHeaders = headers
-                .Select(header => header.Trim())
-                .ToArray();
+            var normalizedHeaders =
+                headers
+                    .Select(
+                        header =>
+                            header?.Trim() ?? string.Empty)
+                    .ToArray();
 
-            var errors = new List<string>();
+            var errors =
+                new List<string>();
 
-            ValidateDuplicates(normalizedHeaders, errors);
-            ValidateRequiredHeaders(normalizedHeaders, errors);
-            ValidateUnexpectedHeaders(normalizedHeaders, errors);
-            ValidateColumnOrder(normalizedHeaders, errors);
+            ValidateBlankHeaders(
+                normalizedHeaders,
+                errors);
+
+            ValidateDuplicates(
+                normalizedHeaders,
+                errors);
+
+            ValidateRequiredHeaders(
+                normalizedHeaders,
+                errors);
+
+            ValidateUnexpectedHeaders(
+                normalizedHeaders,
+                errors);
+
+            ValidateColumnOrder(
+                normalizedHeaders,
+                errors);
 
             return errors.Count == 0
                 ? CsvStructureValidationResult.Success()
@@ -32,17 +53,42 @@ namespace CSVFileUploader.Infrastructure.CSV
                     errors.ToArray());
         }
 
+        private static void ValidateBlankHeaders(
+            IReadOnlyCollection<string> headers,
+            ICollection<string> errors)
+        {
+            for (var index = 0;
+                 index < headers.Count;
+                 index++)
+            {
+                if (string.IsNullOrWhiteSpace(
+                        headers.ElementAt(index)))
+                {
+                    errors.Add(
+                        $"Column {index + 1} has an empty header.");
+                }
+            }
+        }
+
         private static void ValidateDuplicates(
             IReadOnlyCollection<string> headers,
             ICollection<string> errors)
         {
-            var duplicates = headers
-                .GroupBy(
-                    header => header,
-                    StringComparer.OrdinalIgnoreCase)
-                .Where(group => group.Count() > 1)
-                .Select(group => group.Key)
-                .ToArray();
+            var duplicates =
+                headers
+                    .Where(
+                        header =>
+                            !string.IsNullOrWhiteSpace(header))
+                    .GroupBy(
+                        header => header,
+                        StringComparer.OrdinalIgnoreCase)
+                    .Where(
+                        group =>
+                            group.Count() > 1)
+                    .Select(
+                        group =>
+                            group.Key)
+                    .ToArray();
 
             foreach (var duplicate in duplicates)
             {
@@ -55,13 +101,17 @@ namespace CSVFileUploader.Infrastructure.CSV
             IReadOnlyCollection<string> headers,
             ICollection<string> errors)
         {
-            foreach (var requiredHeader in CsvFileDefinition.RequiredHeaders)
+            foreach (
+                var requiredHeader
+                in CsvFileDefinition.RequiredHeaders)
             {
-                var exists = headers.Any(
-                    header => string.Equals(
-                        header,
-                        requiredHeader,
-                        StringComparison.OrdinalIgnoreCase));
+                var exists =
+                    headers.Any(
+                        header =>
+                            string.Equals(
+                                header,
+                                requiredHeader,
+                                StringComparison.OrdinalIgnoreCase));
 
                 if (!exists)
                 {
@@ -77,11 +127,18 @@ namespace CSVFileUploader.Infrastructure.CSV
         {
             foreach (var header in headers)
             {
-                var isExpected = CsvFileDefinition.OrderedHeaders.Any(
-                    expected => string.Equals(
-                        expected,
-                        header,
-                        StringComparison.OrdinalIgnoreCase));
+                if (string.IsNullOrWhiteSpace(header))
+                {
+                    continue;
+                }
+
+                var isExpected =
+                    CsvFileDefinition.OrderedHeaders.Any(
+                        expected =>
+                            string.Equals(
+                                expected,
+                                header,
+                                StringComparison.OrdinalIgnoreCase));
 
                 if (!isExpected)
                 {
@@ -95,14 +152,16 @@ namespace CSVFileUploader.Infrastructure.CSV
             IReadOnlyCollection<string> headers,
             ICollection<string> errors)
         {
-            var actualHeaders = headers.ToArray();
+            var actualHeaders =
+                headers.ToArray();
 
-            if (actualHeaders.Count() != CsvFileDefinition.OrderedHeaders.Count)
+            if (actualHeaders.Length !=
+                CsvFileDefinition.OrderedHeaders.Count)
             {
                 errors.Add(
                     $"Expected exactly " +
                     $"{CsvFileDefinition.OrderedHeaders.Count} columns, " +
-                    $"but found {actualHeaders.Count()}.");
+                    $"but found {actualHeaders.Length}.");
 
                 return;
             }

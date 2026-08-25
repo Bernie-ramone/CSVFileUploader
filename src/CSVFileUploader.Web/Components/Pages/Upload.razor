@@ -1,9 +1,11 @@
 ﻿@page "/upload"
+@attribute [Authorize]
 @rendermode InteractiveServer
 
 @using System.Security.Cryptography
 @using CSVFileUploader.Application.Common.Models
 @using CSVFileUploader.Application.CSV.UploadCsv
+@using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Forms
 @using CSVFileUploader.Web.Components.Shared
 @using CSVFileUploader.Web.Services
@@ -180,7 +182,8 @@
 
         _selectedFile = args.File;
 
-        _selectedFileName = _selectedFile.Name;
+        _selectedFileName =
+            _selectedFile.Name;
     }
 
     private async Task UploadAsync()
@@ -251,6 +254,7 @@
             await sha256.ComputeHashAsync(
                 stream);
 
-        return Convert.ToHexString(hash);
+        return Convert.ToHexString(
+            hash);
     }
 }

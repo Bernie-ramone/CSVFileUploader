@@ -2,6 +2,7 @@
 
 namespace CSVFileUploader.Web.Services
 {
+
     public sealed class UiErrorHandler
     {
         private readonly ILogger<UiErrorHandler> _logger;
@@ -23,20 +24,29 @@ namespace CSVFileUploader.Web.Services
                 throw exception;
             }
 
+            var userMessage =
+                exception switch
+                {
+                    IOException =>
+                        "The file could not be read.",
+
+                    ArgumentException =>
+                        "The supplied information is invalid.",
+
+                    InvalidOperationException =>
+                        "The operation could not be completed.",
+
+                    _ =>
+                        "An unexpected error occurred. " +
+                        "Please try again."
+                };
+
             _logger.LogError(
                 exception,
-                "Unexpected UI error during {Operation}.",
+                "UI operation {Operation} failed.",
                 operation);
 
-            return exception switch
-            {
-                IOException =>
-                    "The file could not be read.",
-
-                _ =>
-                    "An unexpected error occurred. " +
-                    "Please try again."
-            };
+            return userMessage;
         }
     }
 }

@@ -1,9 +1,10 @@
 ﻿using CSVFileUploader.Web.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace CSVFileUploader.Web.Tests
+namespace CSVFileUploader.Web.Tests.Services
 {
-    public class UiErrorHandlerTests
+
+    public sealed class UiErrorHandlerTests
     {
         private readonly UiErrorHandler _handler =
             new(
@@ -13,7 +14,8 @@ namespace CSVFileUploader.Web.Tests
         public void Handle_WithIOException_ShouldReturnFileMessage()
         {
             var exception =
-                new IOException("File read failed.");
+                new IOException(
+                    "Internal file-system failure.");
 
             var result =
                 _handler.Handle(
@@ -26,7 +28,24 @@ namespace CSVFileUploader.Web.Tests
         }
 
         [Fact]
-        public void Handle_WithUnexpectedException_ShouldReturnGenericMessage()
+        public void Handle_WithArgumentException_ShouldReturnValidationMessage()
+        {
+            var exception =
+                new ArgumentException(
+                    "Internal argument details.");
+
+            var result =
+                _handler.Handle(
+                    exception,
+                    "CSV file upload");
+
+            Assert.Equal(
+                "The supplied information is invalid.",
+                result);
+        }
+
+        [Fact]
+        public void Handle_WithInvalidOperationException_ShouldReturnSafeMessage()
         {
             var exception =
                 new InvalidOperationException(
@@ -38,8 +57,35 @@ namespace CSVFileUploader.Web.Tests
                     "loading upload history");
 
             Assert.Equal(
+                "The operation could not be completed.",
+                result);
+        }
+
+        [Fact]
+        public void Handle_WithUnexpectedException_ShouldReturnGenericMessage()
+        {
+            var exception =
+                new Exception(
+                    "Database password and internal details.");
+
+            var result =
+                _handler.Handle(
+                    exception,
+                    "loading upload details");
+
+            Assert.Equal(
                 "An unexpected error occurred. Please try again.",
                 result);
+
+            Assert.DoesNotContain(
+                "Database password",
+                result,
+                StringComparison.Ordinal);
+
+            Assert.DoesNotContain(
+                "internal details",
+                result,
+                StringComparison.Ordinal);
         }
 
         [Fact]
@@ -52,6 +98,16 @@ namespace CSVFileUploader.Web.Tests
                 () =>
                     _handler.Handle(
                         exception,
+                        "CSV file upload"));
+        }
+
+        [Fact]
+        public void Handle_WithNullException_ShouldThrow()
+        {
+            Assert.Throws<ArgumentNullException>(
+                () =>
+                    _handler.Handle(
+                        null!,
                         "CSV file upload"));
         }
     }
