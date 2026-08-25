@@ -1,8 +1,10 @@
-﻿using CSVFileUploader.Infrastructure.CSV;
+﻿using CSVFileUploader.Application.Common.Models;
+using CSVFileUploader.Infrastructure.CSV;
 using System.Text;
 
 namespace CSVFileUploader.Infrastructure.Tests.CSV
 {
+
     public class CsvReaderTests
     {
         [Fact]
@@ -19,24 +21,58 @@ namespace CSVFileUploader.Infrastructure.Tests.CSV
                 new MemoryStream(
                     Encoding.UTF8.GetBytes(csv));
 
-            var reader = new CsvReader();
+            var reader =
+                CreateReader();
 
-            var result = await reader.ReadAsync(stream);
+            var result =
+                await reader.ReadAsync(stream);
 
-            Assert.Equal(8, result.Headers.Count);
-            Assert.Equal(2, result.Rows.Count);
+            Assert.Equal(
+                8,
+                result.Headers.Count);
 
-            var firstRow = result.Rows.First();
+            Assert.Equal(
+                2,
+                result.Rows.Count);
 
-            Assert.Equal(2, firstRow.RowNumber);
-            Assert.Equal("REC-0001", firstRow.RecordId);
-            Assert.Equal("AST-1001", firstRow.AssetId);
-            Assert.Equal("MINE-NORTH", firstRow.SourceSite);
-            Assert.Equal("PLANT-A", firstRow.DestinationSite);
-            Assert.Equal("2026-08-01", firstRow.EventDate);
-            Assert.Equal("125.50", firstRow.Volume);
-            Assert.Equal("TON", firstRow.Unit);
-            Assert.Equal("Morning shift", firstRow.Notes);
+            var firstRow =
+                result.Rows.First();
+
+            Assert.Equal(
+                2,
+                firstRow.RowNumber);
+
+            Assert.Equal(
+                "REC-0001",
+                firstRow.RecordId);
+
+            Assert.Equal(
+                "AST-1001",
+                firstRow.AssetId);
+
+            Assert.Equal(
+                "MINE-NORTH",
+                firstRow.SourceSite);
+
+            Assert.Equal(
+                "PLANT-A",
+                firstRow.DestinationSite);
+
+            Assert.Equal(
+                "2026-08-01",
+                firstRow.EventDate);
+
+            Assert.Equal(
+                "125.50",
+                firstRow.Volume);
+
+            Assert.Equal(
+                "TON",
+                firstRow.Unit);
+
+            Assert.Equal(
+                "Morning shift",
+                firstRow.Notes);
         }
 
         [Fact]
@@ -52,11 +88,15 @@ namespace CSVFileUploader.Infrastructure.Tests.CSV
                 new MemoryStream(
                     Encoding.UTF8.GetBytes(csv));
 
-            var reader = new CsvReader();
+            var reader =
+                CreateReader();
 
-            var result = await reader.ReadAsync(stream);
+            var result =
+                await reader.ReadAsync(stream);
 
-            var row = Assert.Single(result.Rows);
+            var row =
+                Assert.Single(
+                    result.Rows);
 
             Assert.Null(row.Unit);
             Assert.Null(row.Notes);
@@ -75,13 +115,19 @@ namespace CSVFileUploader.Infrastructure.Tests.CSV
                 new MemoryStream(
                     Encoding.UTF8.GetBytes(csv));
 
-            var reader = new CsvReader();
+            var reader =
+                CreateReader();
 
-            var result = await reader.ReadAsync(stream);
+            var result =
+                await reader.ReadAsync(stream);
 
-            var row = Assert.Single(result.Rows);
+            var row =
+                Assert.Single(
+                    result.Rows);
 
-            Assert.Equal("08/01/2026", row.EventDate);
+            Assert.Equal(
+                "08/01/2026",
+                row.EventDate);
         }
 
         [Fact]
@@ -97,13 +143,98 @@ namespace CSVFileUploader.Infrastructure.Tests.CSV
                 new MemoryStream(
                     Encoding.UTF8.GetBytes(csv));
 
-            var reader = new CsvReader();
+            var reader =
+                CreateReader();
 
-            var result = await reader.ReadAsync(stream);
+            var result =
+                await reader.ReadAsync(stream);
 
-            var row = Assert.Single(result.Rows);
+            var row =
+                Assert.Single(
+                    result.Rows);
 
-            Assert.Equal("INVALID", row.Volume);
+            Assert.Equal(
+                "INVALID",
+                row.Volume);
+        }
+
+        [Fact]
+        public async Task ReadAsync_WhenRowCountExceedsLimit_ShouldThrow()
+        {
+            var builder =
+                new StringBuilder();
+
+            builder.AppendLine(
+                "RecordId,AssetId,SourceSite,DestinationSite,EventDate,Volume,Unit,Notes");
+
+            for (var index = 1;
+                 index <= 3;
+                 index++)
+            {
+                builder.AppendLine(
+                    $"REC-{index:0000},AST-{index:0000}," +
+                    "MINE-NORTH,PLANT-A,2026-08-01,100.00,TON,Test");
+            }
+
+            await using var stream =
+                new MemoryStream(
+                    Encoding.UTF8.GetBytes(
+                        builder.ToString()));
+
+            var options =
+                new CsvUploadOptions
+                {
+                    MaximumRowCount = 2
+                };
+
+            var reader =
+                new CsvReader(options);
+
+            var exception =
+                await Assert.ThrowsAsync<
+                    InvalidOperationException>(
+                    () => reader.ReadAsync(stream));
+
+            Assert.Contains(
+                "more than 2 data rows",
+                exception.Message);
+        }
+
+        [Fact]
+        public async Task ReadAsync_WhenRowCountIsExactlyAtLimit_ShouldSucceed()
+        {
+            const string csv =
+                """
+            RecordId,AssetId,SourceSite,DestinationSite,EventDate,Volume,Unit,Notes
+            REC-0001,AST-0001,MINE-NORTH,PLANT-A,2026-08-01,100.00,TON,Test
+            REC-0002,AST-0002,MINE-NORTH,PLANT-A,2026-08-01,100.00,TON,Test
+            """;
+
+            await using var stream =
+                new MemoryStream(
+                    Encoding.UTF8.GetBytes(csv));
+
+            var options =
+                new CsvUploadOptions
+                {
+                    MaximumRowCount = 2
+                };
+
+            var reader =
+                new CsvReader(options);
+
+            var result =
+                await reader.ReadAsync(stream);
+
+            Assert.Equal(
+                2,
+                result.Rows.Count);
+        }
+
+        private static CsvReader CreateReader()
+        {
+            return new CsvReader(
+                new CsvUploadOptions());
         }
     }
 }

@@ -6,11 +6,11 @@ using CSVFileUploader.Application.DTOs;
 using CSVFileUploader.Domain.Entities;
 using CSVFileUploader.Domain.ValueObjects;
 using FluentValidation;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
 {
+
     public class UploadCsvCommandHandlerTests
     {
         [Fact]
@@ -95,8 +95,6 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
             Assert.Equal(
                 1,
                 unitOfWork.TransactionCalls);
-
-           
         }
 
         [Fact]
@@ -162,8 +160,6 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
             Assert.Equal(
                 1,
                 unitOfWork.SaveChangesCalls);
-
-            
         }
 
         [Fact]
@@ -386,8 +382,6 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
             Assert.Equal(
                 1,
                 recordRepository.GetExistingBusinessKeysCalls);
-
-            
         }
 
         [Fact]
@@ -485,8 +479,6 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
             Assert.Equal(
                 1,
                 unitOfWork.TransactionCalls);
-
-           
         }
 
         [Fact]
@@ -653,8 +645,124 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
             Assert.Equal(
                 1,
                 unitOfWork.TransactionCalls);
+        }
 
-            
+        [Fact]
+        public async Task HandleAsync_WithFiveThousandRows_ShouldPerformOneBatchDuplicateLookupAndOneBatchInsert()
+        {
+            const int rowCount = 5_000;
+
+            var rows =
+                new List<CsvRowDto>(
+                    capacity: rowCount);
+
+            for (var index = 1;
+                 index <= rowCount;
+                 index++)
+            {
+                var assetNumber =
+                    (index - 1) % 9_999 + 1;
+
+                rows.Add(
+                    new CsvRowDto(
+                        RowNumber: index + 1,
+                        RecordId: $"REC-{index % 10_000:D4}",
+                        AssetId: $"AST-{assetNumber:D4}",
+                        SourceSite: "MINE-NORTH",
+                        DestinationSite: "PLANT-A",
+                        EventDate: "2026-08-01",
+                        Volume: "100.00",
+                        Unit: "TON",
+                        Notes: "Batch performance test"));
+            }
+
+            var csvReader =
+                new FakeCsvReader(
+                    new CsvReadResult(
+                        [
+                            "RecordId",
+                        "AssetId",
+                        "SourceSite",
+                        "DestinationSite",
+                        "EventDate",
+                        "Volume",
+                        "Unit",
+                        "Notes"
+                        ],
+                        rows));
+
+            var structureValidator =
+                new FakeStructureValidator(
+                    CsvStructureValidationResult.Success());
+
+            var recordRepository =
+                new FakeImportedRecordRepository();
+
+            var uploadRepository =
+                new FakeUploadRepository();
+
+            var unitOfWork =
+                new FakeUnitOfWork();
+
+            var handler =
+                CreateHandler(
+                    csvReader,
+                    structureValidator,
+                    recordRepository,
+                    uploadRepository,
+                    unitOfWork);
+
+            await using var stream =
+                new MemoryStream();
+
+            var stopwatch =
+                System.Diagnostics.Stopwatch.StartNew();
+
+            var result =
+                await handler.HandleAsync(
+                    new UploadCsvCommand(
+                        stream,
+                        "large-batch-test.csv",
+                        "text/csv",
+                        500_000));
+
+            stopwatch.Stop();
+
+            Assert.Equal(
+                rowCount,
+                result.TotalRows);
+
+            Assert.Equal(
+                rowCount,
+                result.InsertedRows);
+
+            Assert.Equal(
+                0,
+                result.DuplicateRows);
+
+            Assert.Empty(
+                result.Errors);
+
+            Assert.Equal(
+                1,
+                recordRepository.GetExistingBusinessKeysCalls);
+
+            Assert.Equal(
+                rowCount,
+                recordRepository.InsertedRecords.Count);
+
+            Assert.Equal(
+                1,
+                recordRepository.AddRangeCalls);
+
+            Assert.Equal(
+                1,
+                unitOfWork.TransactionCalls);
+
+            Assert.True(
+                stopwatch.Elapsed < TimeSpan.FromSeconds(30),
+                $"Processing {rowCount:N0} rows took " +
+                $"{stopwatch.Elapsed.TotalSeconds:F2} seconds.");
         }
 
         private static UploadCsvCommandHandler CreateHandler(
@@ -725,6 +833,12 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
                 private set;
             }
 
+            public int AddRangeCalls
+            {
+                get;
+                private set;
+            }
+
             public Task<IReadOnlyCollection<ImportedRecordKey>>
                 GetExistingBusinessKeysAsync(
                     IReadOnlyCollection<ImportedRecordKey> businessKeys,
@@ -732,9 +846,10 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
             {
                 GetExistingBusinessKeysCalls++;
 
-                var result = businessKeys
-                    .Where(ExistingKeys.Contains)
-                    .ToArray();
+                var result =
+                    businessKeys
+                        .Where(ExistingKeys.Contains)
+                        .ToArray();
 
                 return Task.FromResult<
                     IReadOnlyCollection<ImportedRecordKey>>(
@@ -745,7 +860,10 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
                 IReadOnlyCollection<ImportedRecord> records,
                 CancellationToken cancellationToken = default)
             {
-                InsertedRecords.AddRange(records);
+                AddRangeCalls++;
+
+                InsertedRecords.AddRange(
+                    records);
 
                 return Task.CompletedTask;
             }
@@ -780,9 +898,10 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
                         upload => upload.Id == id));
             }
 
-            public Task<CsvUpload?> GetSuccessfulUploadByFileHashAsync(
-                string fileHash,
-                CancellationToken cancellationToken = default)
+            public Task<CsvUpload?>
+                GetSuccessfulUploadByFileHashAsync(
+                    string fileHash,
+                    CancellationToken cancellationToken = default)
             {
                 GetSuccessfulUploadCalls++;
 
@@ -802,7 +921,8 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
                             upload => upload.UploadedAtUtc)
                         .FirstOrDefault();
 
-                return Task.FromResult(upload);
+                return Task.FromResult(
+                    upload);
             }
         }
 
@@ -841,4 +961,3 @@ namespace CSVFileUploader.Application.Tests.CSV.UploadCsv
         }
     }
 }
-

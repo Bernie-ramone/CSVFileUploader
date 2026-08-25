@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CSVFileUploader.Integration.Tests.Upload
 {
+
     public class UploadHistoryIntegrationTests
     {
         [Fact]
@@ -25,19 +26,24 @@ namespace CSVFileUploader.Integration.Tests.Upload
                 database.CreateContext();
 
             var recordRepository =
-                new ImportedRecordRepository(context);
+                new ImportedRecordRepository(
+                    context);
 
             var uploadRepository =
-                new UploadRepository(context);
+                new UploadRepository(
+                    context);
 
             var unitOfWork =
-                new UnitOfWork(context);
+                new UnitOfWork(
+                    context);
 
             var historyRepository =
-                new UploadHistoryRepository(context);
+                new UploadHistoryRepository(
+                    context);
 
             var csvReader =
-                new CsvReader();
+                new CsvReader(
+                    new CsvUploadOptions());
 
             var structureValidator =
                 new CsvStructureValidator();
@@ -63,10 +69,11 @@ namespace CSVFileUploader.Integration.Tests.Upload
                     commandValidator,
                     logger);
 
-            var filePath = Path.Combine(
-                AppContext.BaseDirectory,
-                "TestData",
-                "mock_csv_upload_test.csv");
+            var filePath =
+                Path.Combine(
+                    AppContext.BaseDirectory,
+                    "TestData",
+                    "mock_csv_upload_test.csv");
 
             await using var stream =
                 File.OpenRead(filePath);
@@ -79,19 +86,23 @@ namespace CSVFileUploader.Integration.Tests.Upload
                         "text/csv",
                         stream.Length));
 
-            Assert.Equal(20, result.TotalRows);
+            Assert.Equal(
+                20,
+                result.TotalRows);
 
             var queryHandler =
                 new GetUploadHistoryQueryHandler(
                     historyRepository);
 
-            
-            var history = await queryHandler.HandleAsync(
-                new GetUploadHistoryQuery(
-                PageNumber: 1,
-                PageSize: 20));
+            var history =
+                await queryHandler.HandleAsync(
+                    new GetUploadHistoryQuery(
+                        PageNumber: 1,
+                        PageSize: 20));
 
-            var upload = Assert.Single(history.Items);
+            var upload =
+                Assert.Single(
+                    history.Items);
 
             Assert.Equal(
                 "mock_csv_upload_test.csv",
@@ -112,7 +123,7 @@ namespace CSVFileUploader.Integration.Tests.Upload
             Assert.Equal(
                 0,
                 upload.ErrorRows);
-            
+
             Assert.Equal(
                 1,
                 history.PageNumber);
@@ -142,20 +153,25 @@ namespace CSVFileUploader.Integration.Tests.Upload
                 database.CreateContext();
 
             var recordRepository =
-                new ImportedRecordRepository(context);
+                new ImportedRecordRepository(
+                    context);
 
             var uploadRepository =
-                new UploadRepository(context);
+                new UploadRepository(
+                    context);
 
             var unitOfWork =
-                new UnitOfWork(context);
+                new UnitOfWork(
+                    context);
 
             var historyRepository =
-                new UploadHistoryRepository(context);
+                new UploadHistoryRepository(
+                    context);
 
             var handler =
                 new UploadCsvCommandHandler(
-                    new CsvReader(),
+                    new CsvReader(
+                        new CsvUploadOptions()),
                     new CsvStructureValidator(),
                     recordRepository,
                     uploadRepository,
@@ -165,10 +181,11 @@ namespace CSVFileUploader.Integration.Tests.Upload
                         new CsvUploadOptions()),
                     NullLogger<UploadCsvCommandHandler>.Instance);
 
-            var filePath = Path.Combine(
-                AppContext.BaseDirectory,
-                "TestData",
-                "mock_csv_upload_test.csv");
+            var filePath =
+                Path.Combine(
+                    AppContext.BaseDirectory,
+                    "TestData",
+                    "mock_csv_upload_test.csv");
 
             await using var stream =
                 File.OpenRead(filePath);
@@ -218,14 +235,16 @@ namespace CSVFileUploader.Integration.Tests.Upload
         public async Task GetUploadHistory_ShouldReturnRequestedPage()
         {
             await using var database =
-                new Infrastructure.TestDatabase();
+                new TestDatabase();
 
             await database.InitializeAsync();
 
             await using var context =
                 database.CreateContext();
 
-            for (var index = 1; index <= 25; index++)
+            for (var index = 1;
+                 index <= 25;
+                 index++)
             {
                 var upload =
                     CSVFileUploader.Domain.Entities.CsvUpload.Start(
@@ -238,7 +257,8 @@ namespace CSVFileUploader.Integration.Tests.Upload
                     duplicateRows: 0,
                     errorRows: 0);
 
-                context.CsvUploads.Add(upload);
+                context.CsvUploads.Add(
+                    upload);
             }
 
             await context.SaveChangesAsync();

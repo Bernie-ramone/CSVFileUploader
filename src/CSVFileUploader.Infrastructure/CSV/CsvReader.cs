@@ -1,14 +1,21 @@
-﻿using System.Globalization;
-using CSVFileUploader.Application.Common.Interfaces;
+﻿using CSVFileUploader.Application.Common.Interfaces;
 using CSVFileUploader.Application.Common.Models;
 using CSVFileUploader.Application.DTOs;
-using CsvHelper;
 using CsvHelper.Configuration;
+using System.Globalization;
 
 namespace CSVFileUploader.Infrastructure.CSV
 {
     public sealed class CsvReader : ICsvReader
     {
+        private readonly CsvUploadOptions _options;
+
+        public CsvReader(
+            CsvUploadOptions options)
+        {
+            _options = options;
+        }
+
         public async Task<CsvReadResult> ReadAsync(
             Stream stream,
             CancellationToken cancellationToken = default)
@@ -20,6 +27,12 @@ namespace CSVFileUploader.Infrastructure.CSV
                 throw new ArgumentException(
                     "The provided stream cannot be read.",
                     nameof(stream));
+            }
+
+            if (_options.MaximumRowCount < 1)
+            {
+                throw new InvalidOperationException(
+                    "Maximum CSV row count must be greater than zero.");
             }
 
             using var textReader = new StreamReader(
@@ -35,9 +48,10 @@ namespace CSVFileUploader.Infrastructure.CSV
                 DetectColumnCountChanges = true
             };
 
-            using var csv = new CsvHelper.CsvReader(
-                textReader,
-                configuration);
+            using var csv =
+                new CsvHelper.CsvReader(
+                    textReader,
+                    configuration);
 
             await csv.ReadAsync();
 
@@ -49,7 +63,8 @@ namespace CSVFileUploader.Infrastructure.CSV
                 ?? throw new InvalidOperationException(
                     "The CSV file does not contain a header row.");
 
-            var rows = new List<CsvRowDto>();
+            var rows =
+                new List<CsvRowDto>();
 
             var rowNumber = 1;
 
@@ -59,40 +74,53 @@ namespace CSVFileUploader.Infrastructure.CSV
 
                 rowNumber++;
 
-                var row = new CsvRowDto(
-                    RowNumber: rowNumber,
+                var dataRowNumber =
+                    rowNumber - 1;
 
-                    RecordId: GetRequiredField(
-                        csv,
-                        CsvFileDefinition.RecordId),
+                if (dataRowNumber >
+                    _options.MaximumRowCount)
+                {
+                    throw new InvalidOperationException(
+                        $"The CSV file contains more than " +
+                        $"{_options.MaximumRowCount:N0} data rows. " +
+                        "The file cannot be processed.");
+                }
 
-                    AssetId: GetRequiredField(
-                        csv,
-                        CsvFileDefinition.AssetId),
+                var row =
+                    new CsvRowDto(
+                        RowNumber: rowNumber,
 
-                    SourceSite: GetRequiredField(
-                        csv,
-                        CsvFileDefinition.SourceSite),
+                        RecordId: GetRequiredField(
+                            csv,
+                            CsvFileDefinition.RecordId),
 
-                    DestinationSite: GetRequiredField(
-                        csv,
-                        CsvFileDefinition.DestinationSite),
+                        AssetId: GetRequiredField(
+                            csv,
+                            CsvFileDefinition.AssetId),
 
-                    EventDate: GetRequiredField(
-                        csv,
-                        CsvFileDefinition.EventDate),
+                        SourceSite: GetRequiredField(
+                            csv,
+                            CsvFileDefinition.SourceSite),
 
-                    Volume: GetRequiredField(
-                        csv,
-                        CsvFileDefinition.Volume),
+                        DestinationSite: GetRequiredField(
+                            csv,
+                            CsvFileDefinition.DestinationSite),
 
-                    Unit: GetOptionalField(
-                        csv,
-                        CsvFileDefinition.Unit),
+                        EventDate: GetRequiredField(
+                            csv,
+                            CsvFileDefinition.EventDate),
 
-                    Notes: GetOptionalField(
-                        csv,
-                        CsvFileDefinition.Notes));
+                        Volume: GetRequiredField(
+                            csv,
+                            CsvFileDefinition.Volume),
+
+                        Unit: GetOptionalField(
+                            csv,
+                            CsvFileDefinition.Unit),
+
+                        Notes: GetOptionalField(
+                            csv,
+                            CsvFileDefinition.Notes));
 
                 rows.Add(row);
             }
@@ -106,7 +134,9 @@ namespace CSVFileUploader.Infrastructure.CSV
             CsvHelper.CsvReader csv,
             string fieldName)
         {
-            return csv.GetField<string>(fieldName)?.Trim()
+            return csv
+                    .GetField<string>(fieldName)?
+                    .Trim()
                 ?? string.Empty;
         }
 
@@ -114,7 +144,8 @@ namespace CSVFileUploader.Infrastructure.CSV
             CsvHelper.CsvReader csv,
             string fieldName)
         {
-            var value = csv.GetField<string>(fieldName);
+            var value =
+                csv.GetField<string>(fieldName);
 
             return string.IsNullOrWhiteSpace(value)
                 ? null

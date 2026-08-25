@@ -1,26 +1,37 @@
-﻿using CSVFileUploader.Infrastructure.CSV;
+﻿using CSVFileUploader.Application.Common.Models;
+using CSVFileUploader.Infrastructure.CSV;
 
 namespace CSVFileUploader.Infrastructure.Tests.CSV
 {
+
     public class CsvMockFileTests
     {
         [Fact]
         public async Task ReadAsync_WithMockCsv_ShouldReadTwentyRows()
         {
-            var filePath = Path.Combine(
-                AppContext.BaseDirectory,
-                "TestData",
-                "mock_csv_upload_test.csv");
+            var filePath =
+                Path.Combine(
+                    AppContext.BaseDirectory,
+                    "TestData",
+                    "mock_csv_upload_test.csv");
 
             await using var stream =
                 File.OpenRead(filePath);
 
-            var reader = new CsvReader();
+            var reader =
+                new CsvReader(
+                    new CsvUploadOptions());
 
-            var result = await reader.ReadAsync(stream);
+            var result =
+                await reader.ReadAsync(stream);
 
-            Assert.Equal(8, result.Headers.Count);
-            Assert.Equal(20, result.Rows.Count);
+            Assert.Equal(
+                8,
+                result.Headers.Count);
+
+            Assert.Equal(
+                20,
+                result.Rows.Count);
         }
     }
 }

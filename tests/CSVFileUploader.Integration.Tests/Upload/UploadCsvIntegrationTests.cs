@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CSVFileUploader.Integration.Tests.Upload
 {
+
     public class UploadCsvIntegrationTests
     {
         [Fact]
@@ -152,14 +153,14 @@ namespace CSVFileUploader.Integration.Tests.Upload
             const string fileHash =
                 "TEST-HASH-IDEMPOTENT";
 
-            var firstFilePath =
+            var filePath =
                 Path.Combine(
                     AppContext.BaseDirectory,
                     "TestData",
                     "mock_csv_upload_test.csv");
 
             await using var firstStream =
-                File.OpenRead(firstFilePath);
+                File.OpenRead(filePath);
 
             var firstResult =
                 await handler.HandleAsync(
@@ -174,7 +175,7 @@ namespace CSVFileUploader.Integration.Tests.Upload
                 firstResult.Errors);
 
             await using var secondStream =
-                File.OpenRead(firstFilePath);
+                File.OpenRead(filePath);
 
             var secondResult =
                 await handler.HandleAsync(
@@ -299,7 +300,8 @@ namespace CSVFileUploader.Integration.Tests.Upload
             UnitOfWork unitOfWork)
         {
             return new UploadCsvCommandHandler(
-                new CsvReader(),
+                new CsvReader(
+                    new CsvUploadOptions()),
                 new CsvStructureValidator(),
                 recordRepository,
                 uploadRepository,

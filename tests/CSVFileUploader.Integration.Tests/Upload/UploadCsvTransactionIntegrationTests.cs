@@ -8,8 +8,10 @@ using CSVFileUploader.Infrastructure.Persistence.Repositories;
 using CSVFileUploader.Integration.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+
 namespace CSVFileUploader.Integration.Tests.Upload
 {
+
     public class UploadCsvTransactionIntegrationTests
     {
         [Fact]
@@ -41,7 +43,8 @@ namespace CSVFileUploader.Integration.Tests.Upload
 
             var handler =
                 new UploadCsvCommandHandler(
-                    new CsvReader(),
+                    new CsvReader(
+                        new CsvUploadOptions()),
                     new CsvStructureValidator(),
                     failingRepository,
                     uploadRepository,
