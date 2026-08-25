@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 namespace CSVFileUploader.Infrastructure.Persistence.Configurations
 {
     public sealed class CsvUploadConfiguration
-    : IEntityTypeConfiguration<CsvUpload>
+      : IEntityTypeConfiguration<CsvUpload>
     {
         public void Configure(
             EntityTypeBuilder<CsvUpload> builder)
@@ -17,6 +17,13 @@ namespace CSVFileUploader.Infrastructure.Persistence.Configurations
             builder.Property(x => x.FileName)
                 .HasMaxLength(255)
                 .IsRequired();
+
+            builder.Property(x => x.FileHash)
+                .HasMaxLength(64);
+
+            builder.HasIndex(x => x.FileHash)
+                .HasDatabaseName(
+                    "IX_CsvUploads_FileHash");
 
             builder.Property(x => x.UploadedAtUtc)
                 .HasColumnType("datetimeoffset")

@@ -36,50 +36,32 @@ namespace CSVFileUploader.Integration.Tests.Upload
                 new UnitOfWork(
                     context);
 
-            var csvReader =
-                new CsvReader();
-
-            var structureValidator =
-                new CsvStructureValidator();
-
-            var rowValidator =
-                new CsvRowValidator();
-
-            var commandValidator =
-                new UploadCsvCommandValidator(
-                    new CsvUploadOptions());
-
-            var logger =
-                NullLogger<UploadCsvCommandHandler>.Instance;
-
             var handler =
-                new UploadCsvCommandHandler(
-                    csvReader,
-                    structureValidator,
+                CreateHandler(
                     recordRepository,
                     uploadRepository,
-                    unitOfWork,
-                    rowValidator,
-                    commandValidator,
-                    logger);
+                    unitOfWork);
 
-            var filePath = Path.Combine(
-                AppContext.BaseDirectory,
-                "TestData",
-                "mock_csv_upload_test.csv");
+            var filePath =
+                Path.Combine(
+                    AppContext.BaseDirectory,
+                    "TestData",
+                    "mock_csv_upload_test.csv");
+
+            const string fileHash =
+                "TEST-HASH-001";
 
             await using var stream =
                 File.OpenRead(filePath);
 
-            var command =
-                new UploadCsvCommand(
-                    stream,
-                    "mock_csv_upload_test.csv",
-                    "text/csv",
-                    stream.Length);
-
             var result =
-                await handler.HandleAsync(command);
+                await handler.HandleAsync(
+                    new UploadCsvCommand(
+                        stream,
+                        "mock_csv_upload_test.csv",
+                        "text/csv",
+                        stream.Length,
+                        fileHash));
 
             Assert.Equal(
                 20,
@@ -114,6 +96,10 @@ namespace CSVFileUploader.Integration.Tests.Upload
                 upload.Status);
 
             Assert.Equal(
+                "TEST-HASH-001",
+                upload.FileHash);
+
+            Assert.Equal(
                 20,
                 upload.TotalRows);
 
@@ -132,24 +118,196 @@ namespace CSVFileUploader.Integration.Tests.Upload
             Assert.Equal(
                 20,
                 upload.Rows.Count);
+        }
 
-            Assert.Equal(
-                18,
-                upload.Rows.Count(
-                    row => row.Status ==
-                        CsvUploadRowStatus.Imported));
+        [Fact]
+        public async Task UploadCsv_WithSameSuccessfulFileHash_ShouldRejectSecondUpload()
+        {
+            await using var database =
+                new TestDatabase();
 
-            Assert.Equal(
-                2,
-                upload.Rows.Count(
-                    row => row.Status ==
-                        CsvUploadRowStatus.Duplicate));
+            await database.InitializeAsync();
+
+            await using var context =
+                database.CreateContext();
+
+            var recordRepository =
+                new ImportedRecordRepository(
+                    context);
+
+            var uploadRepository =
+                new UploadRepository(
+                    context);
+
+            var unitOfWork =
+                new UnitOfWork(
+                    context);
+
+            var handler =
+                CreateHandler(
+                    recordRepository,
+                    uploadRepository,
+                    unitOfWork);
+
+            const string fileHash =
+                "TEST-HASH-IDEMPOTENT";
+
+            var firstFilePath =
+                Path.Combine(
+                    AppContext.BaseDirectory,
+                    "TestData",
+                    "mock_csv_upload_test.csv");
+
+            await using var firstStream =
+                File.OpenRead(firstFilePath);
+
+            var firstResult =
+                await handler.HandleAsync(
+                    new UploadCsvCommand(
+                        firstStream,
+                        "mock_csv_upload_test.csv",
+                        "text/csv",
+                        firstStream.Length,
+                        fileHash));
+
+            Assert.Empty(
+                firstResult.Errors);
+
+            await using var secondStream =
+                File.OpenRead(firstFilePath);
+
+            var secondResult =
+                await handler.HandleAsync(
+                    new UploadCsvCommand(
+                        secondStream,
+                        "mock_csv_upload_test.csv",
+                        "text/csv",
+                        secondStream.Length,
+                        fileHash));
 
             Assert.Equal(
                 0,
-                upload.Rows.Count(
-                    row => row.Status ==
-                        CsvUploadRowStatus.Invalid));
+                secondResult.TotalRows);
+
+            Assert.Equal(
+                0,
+                secondResult.InsertedRows);
+
+            Assert.Equal(
+                0,
+                secondResult.DuplicateRows);
+
+            var error =
+                Assert.Single(
+                    secondResult.Errors);
+
+            Assert.Equal(
+                0,
+                error.RowNumber);
+
+            Assert.Equal(
+                "This exact file has already been processed.",
+                error.Message);
+
+            Assert.Equal(
+                1,
+                await context.CsvUploads.CountAsync());
+
+            Assert.Equal(
+                18,
+                await context.ImportedRecords.CountAsync());
+        }
+
+        [Fact]
+        public async Task UploadCsv_WithFailedPreviousUpload_ShouldAllowRetry()
+        {
+            await using var database =
+                new TestDatabase();
+
+            await database.InitializeAsync();
+
+            await using var context =
+                database.CreateContext();
+
+            const string fileHash =
+                "TEST-HASH-FAILED";
+
+            var failedUpload =
+                CSVFileUploader.Domain.Entities.CsvUpload.Start(
+                    "failed.csv",
+                    DateTimeOffset.UtcNow,
+                    fileHash);
+
+            failedUpload.MarkAsFailed();
+
+            context.CsvUploads.Add(
+                failedUpload);
+
+            await context.SaveChangesAsync();
+
+            var recordRepository =
+                new ImportedRecordRepository(
+                    context);
+
+            var uploadRepository =
+                new UploadRepository(
+                    context);
+
+            var unitOfWork =
+                new UnitOfWork(
+                    context);
+
+            var handler =
+                CreateHandler(
+                    recordRepository,
+                    uploadRepository,
+                    unitOfWork);
+
+            var filePath =
+                Path.Combine(
+                    AppContext.BaseDirectory,
+                    "TestData",
+                    "mock_csv_upload_test.csv");
+
+            await using var stream =
+                File.OpenRead(filePath);
+
+            var result =
+                await handler.HandleAsync(
+                    new UploadCsvCommand(
+                        stream,
+                        "mock_csv_upload_test.csv",
+                        "text/csv",
+                        stream.Length,
+                        fileHash));
+
+            Assert.Empty(
+                result.Errors);
+
+            Assert.Equal(
+                2,
+                await context.CsvUploads.CountAsync());
+
+            Assert.Equal(
+                18,
+                await context.ImportedRecords.CountAsync());
+        }
+
+        private static UploadCsvCommandHandler CreateHandler(
+            ImportedRecordRepository recordRepository,
+            UploadRepository uploadRepository,
+            UnitOfWork unitOfWork)
+        {
+            return new UploadCsvCommandHandler(
+                new CsvReader(),
+                new CsvStructureValidator(),
+                recordRepository,
+                uploadRepository,
+                unitOfWork,
+                new CsvRowValidator(),
+                new UploadCsvCommandValidator(
+                    new CsvUploadOptions()),
+                NullLogger<UploadCsvCommandHandler>.Instance);
         }
     }
 }

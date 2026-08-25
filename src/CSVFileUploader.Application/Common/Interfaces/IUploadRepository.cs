@@ -11,5 +11,9 @@ namespace CSVFileUploader.Application.Common.Interfaces
         Task<CsvUpload?> GetByIdAsync(
             Guid id,
             CancellationToken cancellationToken = default);
+
+        Task<CsvUpload?> GetSuccessfulUploadByFileHashAsync(
+            string fileHash,
+            CancellationToken cancellationToken = default);
     }
 }

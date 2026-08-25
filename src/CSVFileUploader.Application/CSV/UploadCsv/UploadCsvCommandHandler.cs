@@ -64,9 +64,39 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
                     commandErrors);
             }
 
+            if (!string.IsNullOrWhiteSpace(
+                    command.FileHash))
+            {
+                var existingUpload =
+                    await _uploadRepository
+                        .GetSuccessfulUploadByFileHashAsync(
+                            command.FileHash,
+                            cancellationToken);
+
+                if (existingUpload is not null)
+                {
+                    _logger.LogWarning(
+                        "File {FileName} has already been processed. " +
+                        "Existing upload {UploadId}.",
+                        command.FileName,
+                        existingUpload.Id);
+
+                    return new UploadCsvResult(
+                        0,
+                        0,
+                        0,
+                        [
+                            new CsvUploadError(
+                            0,
+                            "This exact file has already been processed.")
+                        ]);
+                }
+            }
+
             var upload = CsvUpload.Start(
                 command.FileName,
-                DateTimeOffset.UtcNow);
+                DateTimeOffset.UtcNow,
+                command.FileHash);
 
             _logger.LogInformation(
                 "Starting CSV upload {UploadId} for file {FileName} with size {FileSize} bytes.",
@@ -74,212 +104,290 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
                 command.FileName,
                 command.FileSize);
 
-            await _uploadRepository.AddAsync(
-                upload,
-                cancellationToken);
-
-            var readResult = await _csvReader.ReadAsync(
-                command.FileStream,
-                cancellationToken);
-
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var structureValidation =
-                _structureValidator.Validate(
-                    readResult.Headers);
-
-            if (!structureValidation.IsValid)
+            try
             {
-                var structureErrors = structureValidation.Errors
-                    .Select(error => new CsvUploadError(
+                var readResult =
+                    await _csvReader.ReadAsync(
+                        command.FileStream,
+                        cancellationToken);
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var structureValidation =
+                    _structureValidator.Validate(
+                        readResult.Headers);
+
+                if (!structureValidation.IsValid)
+                {
+                    var structureErrors =
+                        structureValidation.Errors
+                            .Select(error =>
+                                new CsvUploadError(
+                                    0,
+                                    error))
+                            .ToArray();
+
+                    upload.MarkAsFailed();
+
+                    await _uploadRepository.AddAsync(
+                        upload,
+                        cancellationToken);
+
+                    await _unitOfWork.SaveChangesAsync(
+                        cancellationToken);
+
+                    _logger.LogWarning(
+                        "CSV upload {UploadId} failed CSV structure validation for file {FileName}.",
+                        upload.Id,
+                        command.FileName);
+
+                    return new UploadCsvResult(
+                        readResult.Rows.Count,
                         0,
-                        error))
-                    .ToArray();
+                        0,
+                        structureErrors);
+                }
 
-                upload.MarkAsFailed();
+                var validRows =
+                    new List<ValidatedCsvRow>();
 
-                await _unitOfWork.SaveChangesAsync(
+                var invalidRows =
+                    new List<InvalidCsvRow>();
+
+                var errors =
+                    new List<CsvUploadError>();
+
+                foreach (var row in readResult.Rows)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    var validationResult =
+                        await _rowValidator.ValidateAsync(
+                            row,
+                            cancellationToken);
+
+                    if (!validationResult.IsValid)
+                    {
+                        var errorMessage =
+                            string.Join(
+                                "; ",
+                                validationResult.Errors
+                                    .Select(
+                                        error =>
+                                            error.ErrorMessage));
+
+                        errors.AddRange(
+                            validationResult.Errors.Select(
+                                error =>
+                                    new CsvUploadError(
+                                        row.RowNumber,
+                                        error.ErrorMessage)));
+
+                        invalidRows.Add(
+                            new InvalidCsvRow(
+                                row.RowNumber,
+                                row.RecordId,
+                                errorMessage));
+
+                        continue;
+                    }
+
+                    var record =
+                        CreateDomainRecord(row);
+
+                    validRows.Add(
+                        new ValidatedCsvRow(
+                            row,
+                            record));
+                }
+
+                var validRecords =
+                    validRows
+                        .Select(x => x.Record)
+                        .ToArray();
+
+                var duplicateIndexes =
+                    FindDuplicateIndexesWithinFile(
+                        validRows);
+
+                var businessKeys =
+                    validRecords
+                        .Select(
+                            record =>
+                                record.BusinessKey)
+                        .ToHashSet();
+
+                var existingKeys =
+                    await _recordRepository
+                        .GetExistingBusinessKeysAsync(
+                            businessKeys,
+                            cancellationToken);
+
+                var recordsToInsert =
+                    new List<ImportedRecord>();
+
+                var auditRows =
+                    new List<CsvUploadRow>();
+
+                foreach (var invalidRow in invalidRows)
+                {
+                    auditRows.Add(
+                        CsvUploadRow.Invalid(
+                            invalidRow.RowNumber,
+                            invalidRow.RecordId,
+                            invalidRow.ErrorMessage));
+                }
+
+                for (var index = 0;
+                     index < validRows.Count;
+                     index++)
+                {
+                    var validatedRow =
+                        validRows[index];
+
+                    var record =
+                        validatedRow.Record;
+
+                    var isDuplicateInFile =
+                        duplicateIndexes.Contains(index);
+
+                    var existsInDatabase =
+                        existingKeys.Contains(
+                            record.BusinessKey);
+
+                    if (isDuplicateInFile ||
+                        existsInDatabase)
+                    {
+                        record.MarkAsDuplicate();
+
+                        var duplicateReason =
+                            isDuplicateInFile
+                                ? "Duplicate row in uploaded file."
+                                : "Record already exists in the database.";
+
+                        auditRows.Add(
+                            CsvUploadRow.Duplicate(
+                                validatedRow.Row.RowNumber,
+                                validatedRow.Row.RecordId,
+                                duplicateReason));
+
+                        continue;
+                    }
+
+                    recordsToInsert.Add(record);
+
+                    auditRows.Add(
+                        CsvUploadRow.Imported(
+                            validatedRow.Row.RowNumber,
+                            validatedRow.Row.RecordId));
+                }
+
+                foreach (var auditRow in auditRows)
+                {
+                    upload.AddRow(auditRow);
+                }
+
+                var duplicateCount =
+                    validRecords.Length -
+                    recordsToInsert.Count;
+
+                var errorRowCount =
+                    invalidRows.Count;
+
+                upload.Complete(
+                    readResult.Rows.Count,
+                    recordsToInsert.Count,
+                    duplicateCount,
+                    errorRowCount);
+
+                await _unitOfWork.ExecuteInTransactionAsync(
+                    async transactionCancellationToken =>
+                    {
+                        await _uploadRepository.AddAsync(
+                            upload,
+                            transactionCancellationToken);
+
+                        if (recordsToInsert.Count > 0)
+                        {
+                            await _recordRepository.AddRangeAsync(
+                                recordsToInsert,
+                                transactionCancellationToken);
+                        }
+                    },
                     cancellationToken);
 
-                _logger.LogWarning(
-                    "CSV upload {UploadId} failed CSV structure validation for file {FileName}.",
+                _logger.LogInformation(
+                    "CSV upload {UploadId} completed for file {FileName}. " +
+                    "TotalRows={TotalRows}, " +
+                    "InsertedRows={InsertedRows}, " +
+                    "DuplicateRows={DuplicateRows}, " +
+                    "ErrorRows={ErrorRows}.",
                     upload.Id,
-                    command.FileName);
+                    command.FileName,
+                    readResult.Rows.Count,
+                    recordsToInsert.Count,
+                    duplicateCount,
+                    errorRowCount);
 
                 return new UploadCsvResult(
                     readResult.Rows.Count,
-                    0,
-                    0,
-                    structureErrors);
+                    recordsToInsert.Count,
+                    duplicateCount,
+                    errors);
             }
-
-            var validRows = new List<ValidatedCsvRow>();
-
-            var errors = new List<CsvUploadError>();
-
-            foreach (var row in readResult.Rows)
+            catch (OperationCanceledException)
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                _logger.LogWarning(
+                    "CSV upload {UploadId} was cancelled.",
+                    upload.Id);
 
-                var validationResult =
-                    await _rowValidator.ValidateAsync(
-                        row,
+                throw;
+            }
+            catch (Exception exception)
+            {
+                upload.MarkAsFailed();
+
+                try
+                {
+                    await _uploadRepository.AddAsync(
+                        upload,
                         cancellationToken);
 
-                if (!validationResult.IsValid)
+                    await _unitOfWork.SaveChangesAsync(
+                        cancellationToken);
+                }
+                catch (Exception auditException)
                 {
-                    var errorMessage = string.Join(
-                        "; ",
-                        validationResult.Errors.Select(
-                            error => error.ErrorMessage));
-
-                    errors.AddRange(
-                        validationResult.Errors.Select(
-                            error => new CsvUploadError(
-                                row.RowNumber,
-                                error.ErrorMessage)));
-
-                    upload.AddRow(
-                        CsvUploadRow.Invalid(
-                            row.RowNumber,
-                            row.RecordId,
-                            errorMessage));
-
-                    continue;
+                    _logger.LogError(
+                        auditException,
+                        "Unable to persist failed CSV upload audit {UploadId}.",
+                        upload.Id);
                 }
 
-                var record = CreateDomainRecord(row);
+                _logger.LogError(
+                    exception,
+                    "CSV upload {UploadId} failed for file {FileName}.",
+                    upload.Id,
+                    command.FileName);
 
-                validRows.Add(
-                    new ValidatedCsvRow(
-                        row,
-                        record));
+                throw;
             }
-
-            var validRecords = validRows
-                .Select(x => x.Record)
-                .ToArray();
-
-            // Duplicate detection inside THIS uploaded file.
-            // The index identifies the later occurrence, so
-            // the first occurrence remains eligible for insertion.
-            var duplicateIndexes =
-                FindDuplicateIndexesWithinFile(
-                    validRows);
-
-            // Duplicate detection against records already in DB.
-            var businessKeys = validRecords
-                .Select(record => record.BusinessKey)
-                .ToHashSet();
-
-            var existingKeys =
-                await _recordRepository.GetExistingBusinessKeysAsync(
-                    businessKeys,
-                    cancellationToken);
-
-            var recordsToInsert =
-                new List<ImportedRecord>();
-
-            for (var index = 0;
-                 index < validRows.Count;
-                 index++)
-            {
-                var validatedRow = validRows[index];
-
-                var record = validatedRow.Record;
-
-                var isDuplicateInFile =
-                    duplicateIndexes.Contains(index);
-
-                var existsInDatabase =
-                    existingKeys.Contains(
-                        record.BusinessKey);
-
-                if (isDuplicateInFile ||
-                    existsInDatabase)
-                {
-                    record.MarkAsDuplicate();
-
-                    var duplicateReason =
-                        isDuplicateInFile
-                            ? "Duplicate row in uploaded file."
-                            : "Record already exists in the database.";
-
-                    upload.AddRow(
-                        CsvUploadRow.Duplicate(
-                            validatedRow.Row.RowNumber,
-                            validatedRow.Row.RecordId,
-                            duplicateReason));
-
-                    continue;
-                }
-
-                recordsToInsert.Add(record);
-
-                upload.AddRow(
-                    CsvUploadRow.Imported(
-                        validatedRow.Row.RowNumber,
-                        validatedRow.Row.RecordId));
-            }
-
-            var duplicateCount =
-                validRecords.Length -
-                recordsToInsert.Count;
-
-            var errorRowCount = errors
-                .Select(error => error.RowNumber)
-                .Where(rowNumber => rowNumber > 0)
-                .Distinct()
-                .Count();
-
-            upload.Complete(
-                readResult.Rows.Count,
-                recordsToInsert.Count,
-                duplicateCount,
-                errorRowCount);
-
-            if (recordsToInsert.Count > 0)
-            {
-                await _recordRepository.AddRangeAsync(
-                    recordsToInsert,
-                    cancellationToken);
-            }
-
-            await _unitOfWork.SaveChangesAsync(
-                cancellationToken);
-
-            _logger.LogInformation(
-                "CSV upload {UploadId} completed for file {FileName}. " +
-                "TotalRows={TotalRows}, " +
-                "InsertedRows={InsertedRows}, " +
-                "DuplicateRows={DuplicateRows}, " +
-                "ErrorRows={ErrorRows}.",
-                upload.Id,
-                command.FileName,
-                readResult.Rows.Count,
-                recordsToInsert.Count,
-                duplicateCount,
-                errorRowCount);
-
-            return new UploadCsvResult(
-                readResult.Rows.Count,
-                recordsToInsert.Count,
-                duplicateCount,
-                errors);
         }
 
         private static ImportedRecord CreateDomainRecord(
             CsvRowDto row)
         {
-            var eventDate = DateOnly.ParseExact(
-                row.EventDate,
-                "yyyy-MM-dd",
-                CultureInfo.InvariantCulture);
+            var eventDate =
+                DateOnly.ParseExact(
+                    row.EventDate,
+                    "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture);
 
-            var volume = decimal.Parse(
-                row.Volume,
-                NumberStyles.Number,
-                CultureInfo.InvariantCulture);
+            var volume =
+                decimal.Parse(
+                    row.Volume,
+                    NumberStyles.Number,
+                    CultureInfo.InvariantCulture);
 
             return ImportedRecord.Create(
                 row.RecordId,
@@ -308,9 +416,12 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
                  index++)
             {
                 var businessKey =
-                    rows[index].Record.BusinessKey;
+                    rows[index]
+                        .Record
+                        .BusinessKey;
 
-                if (!seenKeys.Add(businessKey))
+                if (!seenKeys.Add(
+                        businessKey))
                 {
                     duplicateIndexes.Add(index);
                 }

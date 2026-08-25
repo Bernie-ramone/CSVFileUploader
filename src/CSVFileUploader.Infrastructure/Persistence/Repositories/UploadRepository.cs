@@ -1,5 +1,6 @@
 ﻿using CSVFileUploader.Application.Common.Interfaces;
 using CSVFileUploader.Domain.Entities;
+using CSVFileUploader.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace CSVFileUploader.Infrastructure.Persistence.Repositories
@@ -32,6 +33,24 @@ namespace CSVFileUploader.Infrastructure.Persistence.Repositories
                 .Include(upload => upload.Rows)
                 .FirstOrDefaultAsync(
                     upload => upload.Id == id,
+                    cancellationToken);
+        }
+
+        public Task<CsvUpload?> GetSuccessfulUploadByFileHashAsync(
+            string fileHash,
+            CancellationToken cancellationToken = default)
+        {
+            return _context.CsvUploads
+                .AsNoTracking()
+                .Where(upload =>
+                    upload.FileHash == fileHash &&
+                    (upload.Status ==
+                        CsvUploadStatus.Completed ||
+                     upload.Status ==
+                        CsvUploadStatus.CompletedWithErrors))
+                .OrderByDescending(
+                    upload => upload.UploadedAtUtc)
+                .FirstOrDefaultAsync(
                     cancellationToken);
         }
     }

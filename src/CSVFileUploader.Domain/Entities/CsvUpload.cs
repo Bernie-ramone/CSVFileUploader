@@ -10,6 +10,8 @@ namespace CSVFileUploader.Domain.Entities
 
         public string FileName { get; private set; }
 
+        public string? FileHash { get; private set; }
+
         public DateTimeOffset UploadedAtUtc { get; private set; }
 
         public int TotalRows { get; private set; }
@@ -32,27 +34,35 @@ namespace CSVFileUploader.Domain.Entities
 
         private CsvUpload(
             string fileName,
+            string? fileHash,
             DateTimeOffset uploadedAtUtc)
         {
             Id = Guid.NewGuid();
             FileName = fileName;
+            FileHash = string.IsNullOrWhiteSpace(fileHash)
+                ? null
+                : fileHash.Trim().ToUpperInvariant();
+
             UploadedAtUtc = uploadedAtUtc;
             Status = CsvUploadStatus.Processing;
         }
 
         public static CsvUpload Start(
             string fileName,
-            DateTimeOffset uploadedAtUtc)
+            DateTimeOffset uploadedAtUtc,
+            string? fileHash = null)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(
                 fileName);
 
             return new CsvUpload(
                 fileName.Trim(),
+                fileHash,
                 uploadedAtUtc);
         }
 
-        public void AddRow(CsvUploadRow row)
+        public void AddRow(
+            CsvUploadRow row)
         {
             ArgumentNullException.ThrowIfNull(row);
 
@@ -84,6 +94,12 @@ namespace CSVFileUploader.Domain.Entities
         public void MarkAsFailed()
         {
             Status = CsvUploadStatus.Failed;
+
+            InsertedRows = 0;
+            DuplicateRows = 0;
+            ErrorRows = 0;
+
+            _rows.Clear();
         }
 
         private static void ValidateCounts(

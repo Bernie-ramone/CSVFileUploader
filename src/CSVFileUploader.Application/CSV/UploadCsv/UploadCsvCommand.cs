@@ -4,5 +4,6 @@
     Stream FileStream,
     string FileName,
     string? ContentType,
-    long FileSize);
+    long FileSize,
+    string? FileHash = null);
 }
