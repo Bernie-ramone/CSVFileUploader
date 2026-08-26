@@ -1,16 +1,52 @@
-﻿using CSVFileUploader.Application.Common.Interfaces;
+﻿using System.Diagnostics.Metrics;
+using System.Globalization;
+using CSVFileUploader.Application.Common.Interfaces;
 using CSVFileUploader.Application.Common.Models;
 using CSVFileUploader.Application.DTOs;
 using CSVFileUploader.Domain.Entities;
 using FluentValidation;
-using System.Globalization;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CSVFileUploader.Application.CSV.UploadCsv
 {
+
     public sealed class UploadCsvCommandHandler
     {
+        private static readonly EventId UploadStartedEvent =
+            new(
+                1000,
+                "UploadStarted");
+
+        private static readonly EventId UploadDuplicateEvent =
+            new(
+                1001,
+                "UploadDuplicate");
+
+        private static readonly EventId UploadStructureInvalidEvent =
+            new(
+                1002,
+                "UploadStructureInvalid");
+
+        private static readonly EventId UploadCompletedEvent =
+            new(
+                1003,
+                "UploadCompleted");
+
+        private static readonly EventId UploadCancelledEvent =
+            new(
+                1004,
+                "UploadCancelled");
+
+        private static readonly EventId UploadFailedEvent =
+            new(
+                1005,
+                "UploadFailed");
+
+        private static readonly EventId FailedAuditPersistenceEvent =
+            new(
+                1006,
+                "FailedAuditPersistence");
+
         private readonly ICsvReader _csvReader;
         private readonly ICsvStructureValidator _structureValidator;
         private readonly IImportedRecordRepository _recordRepository;
@@ -51,11 +87,14 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
 
             if (!commandValidation.IsValid)
             {
-                var commandErrors = commandValidation.Errors
-                    .Select(error => new CsvUploadError(
-                        0,
-                        error.ErrorMessage))
-                    .ToArray();
+                var commandErrors =
+                    commandValidation.Errors
+                        .Select(
+                            error =>
+                                new CsvUploadError(
+                                    0,
+                                    error.ErrorMessage))
+                        .ToArray();
 
                 return new UploadCsvResult(
                     0,
@@ -75,10 +114,16 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
 
                 if (existingUpload is not null)
                 {
+                    UploadMetrics.UploadsDuplicated.Add(1);
+
                     _logger.LogWarning(
-                        "File {FileName} has already been processed. " +
-                        "Existing upload {UploadId}.",
+                        UploadDuplicateEvent,
+                        "Upload rejected because the file was already processed. " +
+                        "FileName={FileName}, " +
+                        "FileSize={FileSize}, " +
+                        "ExistingUploadId={ExistingUploadId}.",
                         command.FileName,
+                        command.FileSize,
                         existingUpload.Id);
 
                     return new UploadCsvResult(
@@ -93,16 +138,25 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
                 }
             }
 
-            var upload = CsvUpload.Start(
-                command.FileName,
-                DateTimeOffset.UtcNow,
-                command.FileHash);
+            var upload =
+                CsvUpload.Start(
+                    command.FileName,
+                    DateTimeOffset.UtcNow,
+                    command.FileHash);
+
+            UploadMetrics.UploadsStarted.Add(1);
 
             _logger.LogInformation(
-                "Starting CSV upload {UploadId} for file {FileName} with size {FileSize} bytes.",
+                UploadStartedEvent,
+                "CSV upload started. " +
+                "UploadId={UploadId}, " +
+                "FileName={FileName}, " +
+                "FileSize={FileSize}, " +
+                "FileHash={FileHash}.",
                 upload.Id,
                 command.FileName,
-                command.FileSize);
+                command.FileSize,
+                command.FileHash);
 
             try
             {
@@ -121,10 +175,11 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
                 {
                     var structureErrors =
                         structureValidation.Errors
-                            .Select(error =>
-                                new CsvUploadError(
-                                    0,
-                                    error))
+                            .Select(
+                                error =>
+                                    new CsvUploadError(
+                                        0,
+                                        error))
                             .ToArray();
 
                     upload.MarkAsFailed();
@@ -136,10 +191,19 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
                     await _unitOfWork.SaveChangesAsync(
                         cancellationToken);
 
+                    UploadMetrics.UploadsFailed.Add(1);
+
                     _logger.LogWarning(
-                        "CSV upload {UploadId} failed CSV structure validation for file {FileName}.",
+                        UploadStructureInvalidEvent,
+                        "CSV upload failed structure validation. " +
+                        "UploadId={UploadId}, " +
+                        "FileName={FileName}, " +
+                        "FileSize={FileSize}, " +
+                        "ErrorCount={ErrorCount}.",
                         upload.Id,
-                        command.FileName);
+                        command.FileName,
+                        command.FileSize,
+                        structureErrors.Length);
 
                     return new UploadCsvResult(
                         readResult.Rows.Count,
@@ -203,7 +267,8 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
 
                 var validRecords =
                     validRows
-                        .Select(x => x.Record)
+                        .Select(
+                            x => x.Record)
                         .ToArray();
 
                 var duplicateIndexes =
@@ -249,7 +314,8 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
                         validatedRow.Record;
 
                     var isDuplicateInFile =
-                        duplicateIndexes.Contains(index);
+                        duplicateIndexes.Contains(
+                            index);
 
                     var existsInDatabase =
                         existingKeys.Contains(
@@ -274,7 +340,8 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
                         continue;
                     }
 
-                    recordsToInsert.Add(record);
+                    recordsToInsert.Add(
+                        record);
 
                     auditRows.Add(
                         CsvUploadRow.Imported(
@@ -284,7 +351,8 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
 
                 foreach (var auditRow in auditRows)
                 {
-                    upload.AddRow(auditRow);
+                    upload.AddRow(
+                        auditRow);
                 }
 
                 var duplicateCount =
@@ -293,6 +361,24 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
 
                 var errorRowCount =
                     invalidRows.Count;
+
+                if (recordsToInsert.Count > 0)
+                {
+                    UploadMetrics.RowsInserted.Add(
+                        recordsToInsert.Count);
+                }
+
+                if (duplicateCount > 0)
+                {
+                    UploadMetrics.RowsDuplicated.Add(
+                        duplicateCount);
+                }
+
+                if (errorRowCount > 0)
+                {
+                    UploadMetrics.RowsRejected.Add(
+                        errorRowCount);
+                }
 
                 upload.Complete(
                     readResult.Rows.Count,
@@ -316,14 +402,21 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
                     },
                     cancellationToken);
 
+                UploadMetrics.UploadsCompleted.Add(1);
+
                 _logger.LogInformation(
-                    "CSV upload {UploadId} completed for file {FileName}. " +
+                    UploadCompletedEvent,
+                    "CSV upload completed. " +
+                    "UploadId={UploadId}, " +
+                    "FileName={FileName}, " +
+                    "FileSize={FileSize}, " +
                     "TotalRows={TotalRows}, " +
                     "InsertedRows={InsertedRows}, " +
                     "DuplicateRows={DuplicateRows}, " +
                     "ErrorRows={ErrorRows}.",
                     upload.Id,
                     command.FileName,
+                    command.FileSize,
                     readResult.Rows.Count,
                     recordsToInsert.Count,
                     duplicateCount,
@@ -337,14 +430,24 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
             }
             catch (OperationCanceledException)
             {
+                UploadMetrics.UploadsCancelled.Add(1);
+
                 _logger.LogWarning(
-                    "CSV upload {UploadId} was cancelled.",
-                    upload.Id);
+                    UploadCancelledEvent,
+                    "CSV upload was cancelled. " +
+                    "UploadId={UploadId}, " +
+                    "FileName={FileName}, " +
+                    "FileSize={FileSize}.",
+                    upload.Id,
+                    command.FileName,
+                    command.FileSize);
 
                 throw;
             }
             catch (Exception exception)
             {
+                UploadMetrics.UploadsFailed.Add(1);
+
                 upload.MarkAsFailed();
 
                 try
@@ -359,16 +462,25 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
                 catch (Exception auditException)
                 {
                     _logger.LogError(
+                        FailedAuditPersistenceEvent,
                         auditException,
-                        "Unable to persist failed CSV upload audit {UploadId}.",
-                        upload.Id);
+                        "Failed to persist failed-upload audit. " +
+                        "UploadId={UploadId}, " +
+                        "FileName={FileName}.",
+                        upload.Id,
+                        command.FileName);
                 }
 
                 _logger.LogError(
+                    UploadFailedEvent,
                     exception,
-                    "CSV upload {UploadId} failed for file {FileName}.",
+                    "CSV upload failed. " +
+                    "UploadId={UploadId}, " +
+                    "FileName={FileName}, " +
+                    "FileSize={FileSize}.",
                     upload.Id,
-                    command.FileName);
+                    command.FileName,
+                    command.FileSize);
 
                 throw;
             }
@@ -423,7 +535,8 @@ namespace CSVFileUploader.Application.CSV.UploadCsv
                 if (!seenKeys.Add(
                         businessKey))
                 {
-                    duplicateIndexes.Add(index);
+                    duplicateIndexes.Add(
+                        index);
                 }
             }
 

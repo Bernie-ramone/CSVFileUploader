@@ -4,8 +4,10 @@ using CSVFileUploader.Infrastructure;
 using CSVFileUploader.Infrastructure.Persistence;
 using CSVFileUploader.Infrastructure.Persistence.Identity;
 using CSVFileUploader.Web.Components;
+using CSVFileUploader.Web.Middleware;
 using CSVFileUploader.Web.Services;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 var builder =
     WebApplication.CreateBuilder(args);
@@ -68,6 +70,17 @@ builder.Services
 builder.Services.AddScoped<
     UiErrorHandler>();
 
+builder.Services
+    .AddHealthChecks()
+    .AddDbContextCheck<ApplicationDbContext>(
+        name: "database",
+        failureStatus: HealthStatus.Unhealthy,
+        tags:
+        [
+            "ready",
+            "database"
+        ]);
+
 var app =
     builder.Build();
 
@@ -88,6 +101,8 @@ app.UseHttpsRedirection();
 
 app.UseStaticFiles();
 
+app.UseMiddleware<CorrelationIdMiddleware>();
+
 app.UseRouting();
 
 app.UseAuthentication();
@@ -98,6 +113,9 @@ app.UseAntiforgery();
 
 app.MapRazorPages();
 
+app.MapHealthChecks(
+    "/health");
+
 app.MapStaticAssets();
 
 app.MapRazorComponents<App>()
@@ -107,5 +125,4 @@ app.Run();
 
 public partial class Program
 {
-    
 }

@@ -1,0 +1,47 @@
+﻿@using Microsoft.AspNetCore.Identity
+@using CSVFileUploader.Infrastructure.Persistence.Identity
+
+@inject SignInManager<ApplicationUser> SignInManager
+@inject UserManager<ApplicationUser> UserManager
+
+<ul class="navbar-nav">
+    @if (SignInManager.IsSignedIn(User))
+    {
+        <li class="nav-item">
+            <span class="nav-link">
+                Hello @UserManager.GetUserName(User)!
+            </span>
+        </li>
+
+        <li class="nav-item">
+            <form action="/Identity/Account/Logout"
+                  method="post">
+
+                <input type="hidden"
+                       name="returnUrl"
+                       value="/" />
+
+                <button type="submit"
+                        class="nav-link btn btn-link">
+                    Logout
+                </button>
+            </form>
+        </li>
+    }
+    else
+    {
+        <li class="nav-item">
+            <a class="nav-link"
+               href="/Identity/Account/Register">
+                Register
+            </a>
+        </li>
+
+        <li class="nav-item">
+            <a class="nav-link"
+               href="/Identity/Account/Login">
+                Login
+            </a>
+        </li>
+    }
+</ul>
